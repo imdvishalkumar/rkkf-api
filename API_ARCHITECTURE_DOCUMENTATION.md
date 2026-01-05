@@ -338,3 +338,6 @@ All API responses follow this structure:
 - Uses Laravel Sanctum for token-based authentication
 - Supports both plain text and hashed passwords for backward compatibility
 
+
+
+

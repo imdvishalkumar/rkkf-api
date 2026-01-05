@@ -102,8 +102,9 @@ class UserService
             throw new Exception('User not found', 404);
         }
 
-        // Use soft delete (set role to 0) instead of hard delete
-        return $this->userRepository->softDelete($id);
+        // Hard delete user
+        // Note: If you need soft deletes, enable SoftDeletes trait in User model
+        return $this->userRepository->delete($id);
     }
 
     /**

@@ -19,6 +19,7 @@ return new class extends Migration
             
             $table->primary('user_id');
             $table->index('email');
+            $table->timestamps();
         });
     }
 
@@ -27,4 +28,7 @@ return new class extends Migration
         Schema::dropIfExists('users');
     }
 };
+
+
+
 

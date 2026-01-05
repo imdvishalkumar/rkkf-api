@@ -20,14 +20,13 @@ class UserRepository implements UserRepositoryInterface
     {
         $query = $this->model->newQuery();
 
-        // Exclude soft-deleted users (role = 0) by default
-        if (!isset($filters['include_deleted']) || !$filters['include_deleted']) {
-            $query->where('role', '!=', 0);
-        }
-
+        // Filter by role if specified
         if (isset($filters['role'])) {
             $query->where('role', $filters['role']);
         }
+
+        // Note: role = 0 is for regular users, not soft-deleted users
+        // If you need soft deletes, use Laravel's built-in soft delete feature
 
         return $query->orderBy('user_id', 'desc')->get();
     }
@@ -52,7 +51,20 @@ class UserRepository implements UserRepositoryInterface
             }
         }
 
-        return $this->model->create($data);
+        // Ensure role is an integer and valid enum value
+        if (isset($data['role'])) {
+            $data['role'] = (int)$data['role'];
+            // Validate role value exists in enum
+            if (!in_array($data['role'], [0, 1, 2], true)) {
+                throw new \InvalidArgumentException("Invalid role value: {$data['role']}. Must be 0, 1, or 2.");
+            }
+        }
+
+        // Use DB facade to insert directly, bypassing enum casting during insert
+        // Then retrieve the model to get enum-cast attributes
+        $userId = \Illuminate\Support\Facades\DB::table('users')->insertGetId($data);
+        
+        return $this->find($userId);
     }
 
     public function update(int $id, array $data): bool
@@ -100,17 +112,14 @@ class UserRepository implements UserRepositoryInterface
     }
 
     /**
-     * Soft delete user by setting role to 0
+     * Soft delete user (hard delete for now since we don't have soft deletes enabled)
+     * Note: role = 0 is for regular users, not deleted users
      */
     public function softDelete(int $id): bool
     {
-        $user = $this->find($id);
-        
-        if (!$user) {
-            return false;
-        }
-
-        return $user->update(['role' => 0]);
+        // For now, just do a hard delete
+        // If you need soft deletes, enable them in the User model using SoftDeletes trait
+        return $this->delete($id);
     }
 }
 

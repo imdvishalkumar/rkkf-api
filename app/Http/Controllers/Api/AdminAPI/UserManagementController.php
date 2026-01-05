@@ -44,7 +44,7 @@ class UserManagementController extends Controller
         } catch (\Exception $e) {
             return ApiResponseHelper::error(
                 'Failed to fetch users',
-                $e->getCode() ?: 500,
+                ApiResponseHelper::getStatusCode($e),
                 ['error' => $e->getMessage()]
             );
         }
@@ -75,14 +75,14 @@ class UserManagementController extends Controller
                     'lastname' => $user->lastname,
                     'email' => $user->email,
                     'mobile' => $user->mobile,
-                    'role' => $user->role,
+                    'role' => ApiResponseHelper::getRoleValue($user->role),
                 ],
             ], 'User retrieved successfully');
 
         } catch (\Exception $e) {
             return ApiResponseHelper::error(
                 'Failed to fetch user',
-                $e->getCode() ?: 500,
+                ApiResponseHelper::getStatusCode($e),
                 ['error' => $e->getMessage()]
             );
         }
@@ -113,14 +113,14 @@ class UserManagementController extends Controller
                     'lastname' => $result['user']->lastname,
                     'email' => $result['user']->email,
                     'mobile' => $result['user']->mobile,
-                    'role' => $result['user']->role,
+                    'role' => ApiResponseHelper::getRoleValue($result['user']->role),
                 ],
             ], $result['message']);
 
         } catch (\Exception $e) {
             return ApiResponseHelper::error(
                 'Failed to create user',
-                $e->getCode() ?: 500,
+                ApiResponseHelper::getStatusCode($e),
                 ['error' => $e->getMessage()]
             );
         }
@@ -152,14 +152,14 @@ class UserManagementController extends Controller
                     'lastname' => $result['user']->lastname,
                     'email' => $result['user']->email,
                     'mobile' => $result['user']->mobile,
-                    'role' => $result['user']->role,
+                    'role' => ApiResponseHelper::getRoleValue($result['user']->role),
                 ],
             ], $result['message']);
 
         } catch (\Exception $e) {
             return ApiResponseHelper::error(
                 'Failed to update user',
-                $e->getCode() ?: 500,
+                ApiResponseHelper::getStatusCode($e),
                 ['error' => $e->getMessage()]
             );
         }
@@ -192,7 +192,7 @@ class UserManagementController extends Controller
         } catch (\Exception $e) {
             return ApiResponseHelper::error(
                 'Failed to delete user',
-                $e->getCode() ?: 500,
+                ApiResponseHelper::getStatusCode($e),
                 ['error' => $e->getMessage()]
             );
         }

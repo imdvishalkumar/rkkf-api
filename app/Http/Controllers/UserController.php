@@ -1,11 +1,14 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Api\FrontendAPI;
 
+use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Services\UserService;
-use App\Http\Requests\User\StoreUserRequest;
-use App\Http\Requests\User\UpdateUserRequest;
+use App\Helpers\ApiResponseHelper;
+use App\Http\Requests\FrontendAPI\RegisterUserRequest;
+use App\Http\Requests\FrontendAPI\UpdateUserRequest;
+use Illuminate\Validation\ValidationException;
 use App\Enums\UserRole;
 
 class UserController extends Controller
@@ -18,107 +21,119 @@ class UserController extends Controller
     }
 
     /**
-     * Display a listing of the resource.
+     * Register User
+     * 
+     * @param RegisterUserRequest $request
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function index(Request $request)
-    {
-        $filters = [];
-        
-        if ($request->has('role')) {
-            $filters['role'] = $request->role;
-        }
-
-        $users = $this->userService->getAllUsers($filters);
-        return view('users.index', compact('users'));
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        $roles = UserRole::cases();
-        return view('users.create', compact('roles'));
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(StoreUserRequest $request)
-    {
-        try {
-            $result = $this->userService->createUser($request->validated());
-            return redirect()->route('users.index')
-                ->with('success', $result['message']);
-        } catch (\Exception $e) {
-            return back()->withInput()
-                ->with('error', 'Error creating user: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(int $id)
-    {
-        try {
-            $user = $this->userService->getUserById($id);
-            return view('users.show', compact('user'));
-        } catch (\Exception $e) {
-            return redirect()->route('users.index')
-                ->with('error', $e->getMessage());
-        }
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(int $id)
-    {
-        try {
-            $user = $this->userService->getUserById($id);
-            $roles = UserRole::cases();
-            return view('users.edit', compact('user', 'roles'));
-        } catch (\Exception $e) {
-            return redirect()->route('users.index')
-                ->with('error', $e->getMessage());
-        }
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(UpdateUserRequest $request, int $id)
+    public function register(RegisterUserRequest $request)
     {
         try {
             $data = $request->validated();
-            
-            // Remove password from update if empty
-            if (isset($data['password']) && empty($data['password'])) {
-                unset($data['password']);
-            }
+            // Set default role to USER if not provided
+            $data['role'] = $data['role'] ?? UserRole::USER->value;
 
-            $result = $this->userService->updateUser($id, $data);
-            return redirect()->route('users.index')
-                ->with('success', $result['message']);
+            $result = $this->userService->createUser($data);
+
+            $token = $result['user']->createToken('api-token', ['*'])->plainTextToken;
+
+            return ApiResponseHelper::success([
+                'user' => [
+                    'user_id' => $result['user']->user_id,
+                    'firstname' => $result['user']->firstname,
+                    'lastname' => $result['user']->lastname,
+                    'email' => $result['user']->email,
+                    'mobile' => $result['user']->mobile,
+                    'role' => $result['user']->role,
+                ],
+                'token' => $token,
+                'token_type' => 'Bearer',
+            ], $result['message']);
+
         } catch (\Exception $e) {
-            return back()->withInput()
-                ->with('error', 'Error updating user: ' . $e->getMessage());
+            return ApiResponseHelper::error(
+                'Failed to register user',
+                $e->getCode() ?: 500,
+                ['error' => $e->getMessage()]
+            );
         }
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Update User
+     * 
+     * @param UpdateUserRequest $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function destroy(int $id)
+    public function update(UpdateUserRequest $request, $id)
     {
         try {
-            $this->userService->deleteUser($id);
-            return redirect()->route('users.index')
-                ->with('success', 'User deleted successfully.');
+            // Ensure user can only update their own profile
+            $authenticatedUser = $request->user();
+            
+            if ($authenticatedUser->user_id != $id) {
+                return ApiResponseHelper::forbidden('You can only update your own profile');
+            }
+
+            $data = $request->validated();
+            $result = $this->userService->updateUser($id, $data);
+
+            return ApiResponseHelper::success([
+                'user' => [
+                    'user_id' => $result['user']->user_id,
+                    'firstname' => $result['user']->firstname,
+                    'lastname' => $result['user']->lastname,
+                    'email' => $result['user']->email,
+                    'mobile' => $result['user']->mobile,
+                    'role' => $result['user']->role,
+                ],
+            ], $result['message']);
+
         } catch (\Exception $e) {
-            return redirect()->route('users.index')
-                ->with('error', 'Error deleting user: ' . $e->getMessage());
+            return ApiResponseHelper::error(
+                'Failed to update user',
+                $e->getCode() ?: 500,
+                ['error' => $e->getMessage()]
+            );
+        }
+    }
+
+    /**
+     * Delete User (Soft Delete)
+     * 
+     * @param Request $request
+     * @param int $id
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function delete(Request $request, $id)
+    {
+        try {
+            // Ensure user can only delete their own account
+            $authenticatedUser = $request->user();
+            
+            if ($authenticatedUser->user_id != $id) {
+                return ApiResponseHelper::forbidden('You can only delete your own account');
+            }
+
+            $deleted = $this->userService->deleteUser($id);
+
+            if ($deleted) {
+                // Revoke all tokens
+                $authenticatedUser->tokens()->delete();
+
+                return ApiResponseHelper::success(null, 'User deleted successfully');
+            }
+
+            return ApiResponseHelper::error('Failed to delete user', 500);
+
+        } catch (\Exception $e) {
+            return ApiResponseHelper::error(
+                'Failed to delete user',
+                $e->getCode() ?: 500,
+                ['error' => $e->getMessage()]
+            );
         }
     }
 }
+

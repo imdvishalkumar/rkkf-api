@@ -66,6 +66,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Check if user is a regular user (using enum)
+     */
+    public function isUser(): bool
+    {
+        return $this->role === UserRole::USER;
+    }
+
+    /**
      * Check if user is admin (using enum)
      */
     public function isAdmin(): bool

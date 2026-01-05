@@ -3,10 +3,9 @@
 namespace App\Repositories;
 
 use App\Models\Event;
-use App\Repositories\Contracts\EventRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 
-class EventRepository implements EventRepositoryInterface
+class EventRepository
 {
     protected $model;
 
@@ -15,15 +14,19 @@ class EventRepository implements EventRepositoryInterface
         $this->model = $model;
     }
 
-    public function all(array $filters = []): Collection
+    public function create(array $data): Event
     {
-        $query = $this->model->newQuery();
+        return $this->model->create($data);
+    }
 
-        if (isset($filters['isPublished'])) {
-            $query->where('isPublished', $filters['isPublished']);
-        }
+    public function update(Event $event, array $data): bool
+    {
+        return $event->update($data);
+    }
 
-        return $query->orderBy('from_date', 'desc')->get();
+    public function delete(Event $event): bool
+    {
+        return $event->delete();
     }
 
     public function find(int $id): ?Event
@@ -31,49 +34,19 @@ class EventRepository implements EventRepositoryInterface
         return $this->model->find($id);
     }
 
-    public function create(array $data): Event
+    public function getAll(int $perPage = 15, ?string $category = null)
     {
-        return $this->model->create($data);
-    }
+        $query = $this->model->orderBy('from_date', 'desc');
 
-    public function update(int $id, array $data): bool
-    {
-        $event = $this->find($id);
-        
-        if (!$event) {
-            return false;
+        if ($category) {
+            $query->where('category', $category);
         }
 
-        return $event->update($data);
+        return $query->paginate($perPage);
     }
 
-    public function delete(int $id): bool
+    public function getUpcoming()
     {
-        $event = $this->find($id);
-        
-        if (!$event) {
-            return false;
-        }
-
-        return $event->delete();
-    }
-
-    public function getPublished(array $filters = []): Collection
-    {
-        return $this->all(array_merge($filters, ['isPublished' => 1]));
-    }
-
-    public function getByDateRange(string $startDate, string $endDate): Collection
-    {
-        return $this->model->where(function($query) use ($startDate, $endDate) {
-            $query->whereBetween('from_date', [$startDate, $endDate])
-                  ->orWhereBetween('to_date', [$startDate, $endDate])
-                  ->orWhere(function($q) use ($startDate, $endDate) {
-                      $q->where('from_date', '<=', $startDate)
-                        ->where('to_date', '>=', $endDate);
-                  });
-        })->orderBy('from_date', 'desc')->get();
+        return $this->model->upcoming()->get();
     }
 }
-
-
