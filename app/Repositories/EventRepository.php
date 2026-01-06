@@ -34,12 +34,12 @@ class EventRepository
         return $this->model->find($id);
     }
 
-    public function getAll(int $perPage = 15, ?string $category = null)
+    public function getAll(int $perPage = 15, ?int $categoryId = null)
     {
-        $query = $this->model->orderBy('from_date', 'desc');
+        $query = $this->model->with('category')->orderBy('from_date', 'desc');
 
-        if ($category) {
-            $query->where('category', $category);
+        if ($categoryId) {
+            $query->where('category_id', $categoryId);
         }
 
         return $query->paginate($perPage);

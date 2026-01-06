@@ -20,7 +20,7 @@ class UpdateEventRequest extends FormRequest
             'description' => 'nullable|string',
             'venue' => 'nullable|string',
             'fees' => 'nullable|numeric',
-            'category' => 'nullable|string|max:255',
+            'category_id' => 'sometimes|exists:categories,id',
             'image' => 'nullable|string',
             'subtitle' => 'nullable|string|max:255',
             'likes' => 'nullable|integer',

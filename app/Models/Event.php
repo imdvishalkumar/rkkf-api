@@ -7,6 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 class Event extends Model
 {
     protected $table = 'event';
+
+    public function category()
+    {
+        return $this->belongsTo(Category::class, 'category_id');
+    }
+
     protected $primaryKey = 'event_id';
     public $timestamps = false; // Legacy table might not have created_at/updated_at
 
@@ -23,7 +29,7 @@ class Event extends Model
         'penalty_due_date',
         'isPublished',
         'active', // Assuming this exists or we use isPublished
-        'category',
+        'category_id',
         'image',
         'subtitle',
         'likes',

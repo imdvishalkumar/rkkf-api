@@ -97,27 +97,6 @@ class AuthApiController extends Controller
         }
     }
 
-    /**
-     * Get authenticated user information
-     * 
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function me(Request $request)
-    {
-        $user = $request->user();
-
-        return ApiResponseHelper::success([
-            'user' => [
-                'user_id' => $user->user_id,
-                'firstname' => $user->firstname,
-                'lastname' => $user->lastname,
-                'email' => $user->email,
-                'mobile' => $user->mobile,
-                'role' => ApiResponseHelper::getRoleValue($user->role),
-            ],
-        ], 'User information retrieved successfully');
-    }
 
     /**
      * Unified logout endpoint for all roles

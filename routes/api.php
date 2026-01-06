@@ -6,8 +6,10 @@ use App\Http\Controllers\Api\AttendanceApiController;
 use App\Http\Controllers\Api\FeeApiController;
 use App\Http\Controllers\Api\StudentApiController;
 use App\Http\Controllers\Api\OrderApiController;
-use App\Http\Controllers\Api\ExamApiController;
 use App\Http\Controllers\Api\EventApiController;
+use App\Http\Controllers\Api\ExamApiController;
+use App\Http\Controllers\Api\ProductApiController;
+use App\Http\Controllers\CategoryApiController;
 use App\Http\Controllers\Api\AuthApiController;
 use App\Http\Controllers\Api\UserApiController;
 use App\Http\Controllers\Api\FrontendAPI\UserController as FrontendUserController;
@@ -47,8 +49,6 @@ Route::post('/users', [UserApiController::class, 'store'])->name('api.users.stor
 // ==================== PROTECTED API ROUTES (Require Token) ====================
 Route::middleware(['auth:sanctum'])->group(function () {
 
-    // Authentication routes (require token)
-    Route::get('/me', [AuthApiController::class, 'me'])->name('api.me');
     // List users (requires authentication)
     Route::get('/users', [UserApiController::class, 'index'])->name('api.users.index');
     // Unified logout endpoint (works for all roles)
@@ -200,6 +200,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     // ==================== PRODUCT API ROUTES ====================
 
+    // Get product list with filters (belt_id)
+    Route::get('/products/list', [ProductApiController::class, 'getProductList'])->name('api.products.list');
+
     // Delete product
     Route::post('/products/delete', [OrderApiController::class, 'deleteProduct'])->name('api.products.delete');
 
@@ -259,8 +262,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/admin/instructors/{id}', [InstructorManagementController::class, 'update'])->name('api.admin.instructors.update');
     Route::delete('/admin/instructors/{id}', [InstructorManagementController::class, 'destroy'])->name('api.admin.instructors.destroy');
 
+    // Category Management (Admin can manage categories)
+    Route::apiResource('categories', CategoryApiController::class);
+
 });
 
 // Public API routes (if any)
-// Route::get('/public-endpoint', [Controller::class, 'method']);
 

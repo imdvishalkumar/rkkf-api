@@ -76,6 +76,28 @@ class ProductRepository implements ProductRepositoryInterface
     {
         return $this->all(array_merge($filters, ['is_active' => 1]));
     }
+
+    /**
+     * Get product list with belt_id filter
+     * Joins products and variation tables, filters by qty > 0
+     * If belt_id provided, filters products where belt_id is in comma-separated belt_ids string
+     * Returns flattened structure matching core PHP API (product + variation fields in same row)
+     */
+    public function getProductList(?int $beltId = null): Collection
+    {
+        $query = $this->model->newQuery()
+            ->join('variation as v', 'products.product_id', '=', 'v.product_id')
+            ->where('v.qty', '>', 0)
+            ->select('products.*', 'v.variation', 'v.price', 'v.qty', 'v.variation_id');
+
+        if ($beltId) {
+            // Filter products where belt_id is in comma-separated belt_ids string
+            // Using FIND_IN_SET for MySQL compatibility
+            $query->whereRaw('FIND_IN_SET(?, products.belt_ids)', [$beltId]);
+        }
+
+        return $query->get();
+    }
 }
 
 

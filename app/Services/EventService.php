@@ -15,9 +15,9 @@ class EventService
         $this->eventRepository = $eventRepository;
     }
 
-    public function getAllEvents(int $perPage = 15, ?string $category = null)
+    public function getAllEvents(int $perPage = 15, ?int $categoryId = null)
     {
-        return $this->eventRepository->getAll($perPage, $category);
+        return $this->eventRepository->getAll($perPage, $categoryId);
     }
 
     public function getEventById(int $id)

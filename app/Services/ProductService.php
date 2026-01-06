@@ -93,6 +93,16 @@ class ProductService
 
         return $this->productRepository->delete($id);
     }
+
+    /**
+     * Get product list with belt_id filter
+     * Returns products with variations where qty > 0
+     * Filters by belt_id if provided (checks if belt_id is in comma-separated belt_ids string)
+     */
+    public function getProductList(?int $beltId = null)
+    {
+        return $this->productRepository->getProductList($beltId);
+    }
 }
 
 

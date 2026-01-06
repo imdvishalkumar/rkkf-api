@@ -21,6 +21,8 @@ interface ProductRepositoryInterface
     public function delete(int $id): bool;
     
     public function getActive(array $filters = []): Collection;
+    
+    public function getProductList(?int $beltId = null): Collection;
 }
 
 

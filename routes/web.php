@@ -8,7 +8,7 @@ use App\Http\Controllers\BranchController;
 use App\Http\Controllers\FeeController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\ProductController;
-use App\Http\Controllers\UserController;
+// use App\Http\Controllers\UserController;
 use App\Http\Controllers\BeltController;
 use App\Http\Controllers\ExamController;
 use App\Http\Controllers\EventController;
@@ -33,10 +33,10 @@ Route::middleware(['auth'])->group(function () {
     // Dashboard
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    
+
     // User Routes
-    Route::resource('users', UserController::class);
-    
+    // Route::resource('users', UserController::class);
+
     // Student Routes
     Route::resource('students', StudentController::class);
     Route::patch('students/{student}/deactivate', [StudentController::class, 'deactivate'])->name('students.deactivate');
@@ -44,14 +44,14 @@ Route::middleware(['auth'])->group(function () {
     Route::get('students/active', [StudentController::class, 'active'])->name('students.active');
     Route::get('students/enquire', [StudentController::class, 'enquire'])->name('students.enquire');
     Route::get('students/deactive-report', [StudentController::class, 'deactiveReport'])->name('students.deactive-report');
-    
+
     // Branch Routes
     Route::resource('branches', BranchController::class);
-    
+
     // Belt Routes
     Route::get('belts', [BeltController::class, 'index'])->name('belts.index');
     Route::post('belts/update-exam-fees', [BeltController::class, 'updateExamFees'])->name('belts.update-exam-fees');
-    
+
     // Fee Routes
     Route::resource('fees', FeeController::class);
     Route::get('fees/enter', [FeeController::class, 'enter'])->name('fees.enter');
@@ -59,10 +59,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('fees/enter-exam', [FeeController::class, 'enterExam'])->name('fees.enter-exam');
     Route::get('fees/disable', [FeeController::class, 'disable'])->name('fees.disable');
     Route::get('fees/combined', [FeeController::class, 'combined'])->name('fees.combined');
-    
+
     // Coupon Routes
     Route::resource('coupons', CouponController::class);
-    
+
     // Attendance Routes
     Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');
     Route::get('attendance/insert', [AttendanceController::class, 'insert'])->name('attendance.insert');
@@ -74,34 +74,34 @@ Route::middleware(['auth'])->group(function () {
     Route::post('attendance/show-form', [AttendanceController::class, 'showForm'])->name('attendance.show-form');
     Route::post('attendance', [AttendanceController::class, 'store'])->name('attendance.store');
     Route::get('attendance/get-students', [AttendanceController::class, 'getStudents'])->name('attendance.get-students');
-    
+
     // Product Routes
     Route::resource('products', ProductController::class);
-    
+
     // Order Routes
     Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
     Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
     Route::patch('orders/{order}/viewed', [OrderController::class, 'markViewed'])->name('orders.viewed');
     Route::patch('orders/{order}/delivered', [OrderController::class, 'markDelivered'])->name('orders.delivered');
-    
+
     // Exam Routes
     Route::resource('exams', ExamController::class);
     Route::get('exams/special', [ExamController::class, 'special'])->name('exams.special');
     Route::get('exams/applied', [ExamController::class, 'applied'])->name('exams.applied');
     Route::get('exams/eligible', [ExamController::class, 'eligible'])->name('exams.eligible');
     Route::get('exams/result-report', [ExamController::class, 'resultReport'])->name('exams.result-report');
-    
+
     // Event Routes
     Route::resource('events', EventController::class);
     Route::get('events/applied', [EventController::class, 'applied'])->name('events.applied');
     Route::get('events/eligible', [EventController::class, 'eligible'])->name('events.eligible');
-    
+
     // News Feed Routes
     Route::resource('news-feed', NewsFeedController::class);
-    
+
     // Guide Routes
     Route::resource('guides', GuideController::class);
-    
+
     // Additional Routes (to be implemented)
     // Route::get('refund', [FeeController::class, 'refund'])->name('refund.index');
     // Route::get('fastrack', [StudentController::class, 'fastrack'])->name('fastrack.index');

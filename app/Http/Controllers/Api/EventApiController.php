@@ -30,8 +30,8 @@ class EventApiController extends Controller
     public function index(Request $request)
     {
         try {
-            $category = $request->input('category');
-            $events = $this->eventService->getAllEvents(15, $category);
+            $categoryId = $request->input('category_id');
+            $events = $this->eventService->getAllEvents(15, $categoryId);
 
             // Return unified structure
             return ApiResponseHelper::success(
