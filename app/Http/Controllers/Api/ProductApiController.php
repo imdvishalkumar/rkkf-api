@@ -418,5 +418,29 @@ class ProductApiController extends Controller
 
         return $product;
     }
+
+    /**
+     * Get specific product details (New API)
+     * GET /api/products/details/{product_id}
+     */
+    public function productDetails($productId)
+    {
+        try {
+            $product = Product::with('variations')->findOrFail($productId);
+
+            $product = $this->formatProductWithVariations($product);
+
+            return response()->json([
+                'status' => true,
+                'message' => 'Product details retrieved successfully',
+                'data' => $product,
+            ], 200);
+        } catch (Exception $e) {
+            if ($e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException) {
+                return ApiResponseHelper::error('Product not found', 404);
+            }
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
 }
 

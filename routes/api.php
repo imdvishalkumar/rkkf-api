@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\EventApiController;
 use App\Http\Controllers\Api\ExamApiController;
 use App\Http\Controllers\Api\ProductApiController;
+use App\Http\Controllers\Api\CartApiController;
 use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\AdminAPI\SuperAdminController;
 use App\Http\Controllers\Api\AdminAPI\UserManagementController;
@@ -95,9 +96,22 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('list', [ProductApiController::class, 'getProductList']);
         Route::post('store', [ProductApiController::class, 'store']);
         Route::get('{product_id}', [ProductApiController::class, 'show']);
+        Route::get('details/{product_id}', [ProductApiController::class, 'productDetails']);
         Route::put('{product_id}', [ProductApiController::class, 'update']);
         Route::delete('{product_id}', [ProductApiController::class, 'destroy']);
         Route::put('{product_id}/variations/{variation_id}', [ProductApiController::class, 'updateVariationQty']);
+    });
+
+    /*
+    |--------------------------------------------------------------------------
+    | Cart
+    |--------------------------------------------------------------------------
+    */
+
+    Route::prefix('cart')->group(function () {
+        Route::get('/', [CartApiController::class, 'index']);
+        Route::post('/', [CartApiController::class, 'store']);
+        Route::delete('{id}', [CartApiController::class, 'destroy']);
     });
 
     /*
@@ -109,7 +123,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('admin')->group(function () {
         Route::apiResource('users', UserManagementController::class);
         Route::apiResource('instructors', InstructorManagementController::class);
-        Route::apiResource('categories', CategoryApiController::class);
+        // Route::apiResource('categories', CategoryApiController::class);
         Route::post('super-admin/register', [SuperAdminController::class, 'register']);
     });
 
