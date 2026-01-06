@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('mobile', 15);
             $table->string('email', 100);
             $table->string('password', 16);
-            $table->integer('role');
+            $table->enum('role', ['user', 'admin', 'instructor'])->default('user');
             
             $table->primary('user_id');
             $table->index('email');

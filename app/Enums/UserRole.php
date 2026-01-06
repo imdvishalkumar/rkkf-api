@@ -2,12 +2,15 @@
 
 namespace App\Enums;
 
-enum UserRole: int
+enum UserRole: string
 {
-    case USER = 0;
-    case ADMIN = 1;
-    case INSTRUCTOR = 2;
+    case USER = 'user';
+    case ADMIN = 'admin';
+    case INSTRUCTOR = 'instructor';
 
+    /**
+     * Get human-readable label for the role
+     */
     public function label(): string
     {
         return match($this) {
@@ -17,22 +20,34 @@ enum UserRole: int
         };
     }
 
+    /**
+     * Check if role is admin
+     */
     public function isAdmin(): bool
     {
         return $this === self::ADMIN;
     }
 
+    /**
+     * Check if role is instructor
+     */
     public function isInstructor(): bool
     {
         return $this === self::INSTRUCTOR;
     }
 
+    /**
+     * Get all role values as strings
+     */
     public static function values(): array
     {
         return array_column(self::cases(), 'value');
     }
 
-    public static function fromValue(int $value): ?self
+    /**
+     * Convert string value to enum (tryFrom returns null if not found)
+     */
+    public static function fromValue(string $value): ?self
     {
         return self::tryFrom($value);
     }

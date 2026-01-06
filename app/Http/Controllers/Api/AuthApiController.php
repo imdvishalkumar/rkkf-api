@@ -65,13 +65,9 @@ class AuthApiController extends Controller
             // Create new token
             $token = $user->createToken('api-token', ['*'])->plainTextToken;
 
-            // Determine response key based on role
-            $userKey = match(ApiResponseHelper::getRoleValue($user->role)) {
-                0 => 'user',
-                1 => 'admin',
-                2 => 'instructor',
-                default => 'user'
-            };
+            // Get role string value (user->role is now a UserRole enum, ->value gives the string)
+            $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string)$user->role;
+            $userKey = $roleString; // Use role string as response key
 
             return ApiResponseHelper::success([
                 $userKey => [
@@ -80,7 +76,7 @@ class AuthApiController extends Controller
                     'lastname' => $user->lastname,
                     'email' => $user->email,
                     'mobile' => $user->mobile,
-                    'role' => ApiResponseHelper::getRoleValue($user->role),
+                    'role' => $roleString,
                 ],
                 'token' => $token,
                 'token_type' => 'Bearer',

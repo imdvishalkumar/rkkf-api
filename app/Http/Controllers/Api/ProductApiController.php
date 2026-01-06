@@ -95,7 +95,7 @@ class ProductApiController extends Controller
             // Get pagination parameters
             $perPage = $request->input('per_page', PaginationHelper::getDefaultPerPage());
             $page = $request->input('page', 1);
-            
+
             // Get with pagination
             $products = $query->paginate($perPage, ['*'], 'page', $page);
 
@@ -125,7 +125,7 @@ class ProductApiController extends Controller
     {
         try {
             $product = Product::with('variations')->findOrFail($productId);
-            
+
             $product = $this->formatProductWithVariations($product);
 
             return response()->json([
@@ -148,16 +148,16 @@ class ProductApiController extends Controller
     public function store(Request $request)
     {
         try {
-                $validated = $request->validate([
-                    'name' => 'required|string|max:50',
-                    'details' => 'required|string|max:300',
-                    'image1' => 'required|file|image|mimes:jpeg,jpg,png|max:5120',
-                    'image2' => 'nullable|file|image|mimes:jpeg,jpg,png|max:5120',
-                    'image3' => 'nullable|file|image|mimes:jpeg,jpg,png|max:5120',
-                    'belt_ids' => 'required|string|max:256',
-                    'is_active' => 'required',
-                    'variations' => 'required',
-                ]);
+            $validated = $request->validate([
+                'name' => 'required|string|max:50',
+                'details' => 'required|string|max:300',
+                'image1' => 'required|file|image|mimes:jpeg,jpg,png|max:5120',
+                'image2' => 'nullable|file|image|mimes:jpeg,jpg,png|max:5120',
+                'image3' => 'nullable|file|image|mimes:jpeg,jpg,png|max:5120',
+                'belt_ids' => 'required|string|max:256',
+                'is_active' => 'required',
+                'variations' => 'required',
+            ]);
 
             // Normalize belt_ids (trim extra quotes if present)
             $beltIdsRaw = $request->input('belt_ids', '');

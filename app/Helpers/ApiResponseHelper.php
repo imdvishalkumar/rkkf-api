@@ -118,14 +118,18 @@ class ApiResponseHelper
     }
 
     /**
-     * Get role value from enum or integer
+     * Get role value from enum or string
+     * Returns string format: 'user', 'admin', 'instructor'
      */
-    public static function getRoleValue($role): int
+    public static function getRoleValue($role): string
     {
         if ($role instanceof \BackedEnum) {
+            return (string)$role->value;
+        }
+        if ($role instanceof \App\Enums\UserRole) {
             return $role->value;
         }
-        return (int)$role;
+        return (string)$role;
     }
 }
 
