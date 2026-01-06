@@ -75,6 +75,16 @@ class AuthController extends Controller
     }
 
     /**
+     * Show login form (web)
+     *
+     * @return \Illuminate\Contracts\View\View
+     */
+    public function showLoginForm()
+    {
+        return view('auth.login');
+    }
+
+    /**
      * Login User
      * 
      * @param Request $request
