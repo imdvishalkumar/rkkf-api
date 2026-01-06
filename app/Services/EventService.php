@@ -15,9 +15,16 @@ class EventService
         $this->eventRepository = $eventRepository;
     }
 
-    public function getAllEvents(int $perPage = 15, ?int $categoryId = null)
+    /**
+     * Get all events with optional category filter (id or names) and upcoming event filter
+     *
+     * @param int $perPage
+     * @param mixed $category Either null, int category id, or array of category names
+     * @param mixed $upcomingEvent Either null or array of upcoming event types/labels
+     */
+    public function getAllEvents(int $perPage = 15, $category = null, $upcomingEvent = null)
     {
-        return $this->eventRepository->getAll($perPage, $categoryId);
+        return $this->eventRepository->getAll($perPage, $category, $upcomingEvent);
     }
 
     public function getEventById(int $id)

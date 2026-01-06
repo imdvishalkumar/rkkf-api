@@ -199,9 +199,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/event/get-applied', [EventApiController::class, 'getEventApplied'])->name('api.event.get-applied');
 
     // ==================== PRODUCT API ROUTES ====================
+    // CRUD Operations for Products
+    Route::prefix('products')->group(function () {
+        Route::get('/list', [ProductApiController::class, 'getProductList'])->name('api.products.list');
+        Route::post('/store', [ProductApiController::class, 'store'])->name('api.products.store');
+        Route::get('/show/{product_id}', [ProductApiController::class, 'show'])->name('api.products.show');
+        Route::put('/update/{product_id}', [ProductApiController::class, 'update'])->name('api.products.update');
+        Route::delete('/destroy/{product_id}', [ProductApiController::class, 'destroy'])->name('api.products.destroy');
+    });
 
-    // Get product list with filters (belt_id)
-    Route::get('/products/list', [ProductApiController::class, 'getProductList'])->name('api.products.list');
+    // Update variation quantity
+    Route::put('/products/{product_id}/variations/{variation_id}', [ProductApiController::class, 'updateVariationQty'])->name('api.products.variations.update');
 
     // Delete product
     Route::post('/products/delete', [OrderApiController::class, 'deleteProduct'])->name('api.products.delete');

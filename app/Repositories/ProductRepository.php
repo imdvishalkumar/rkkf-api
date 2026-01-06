@@ -83,12 +83,12 @@ class ProductRepository implements ProductRepositoryInterface
      * If belt_id provided, filters products where belt_id is in comma-separated belt_ids string
      * Returns flattened structure matching core PHP API (product + variation fields in same row)
      */
-    public function getProductList(?int $beltId = null): Collection
+    public function getProductList(?int $beltId = null, int $perPage = 10, int $page = 1): LengthAwarePaginator
     {
         $query = $this->model->newQuery()
             ->join('variation as v', 'products.product_id', '=', 'v.product_id')
             ->where('v.qty', '>', 0)
-            ->select('products.*', 'v.variation', 'v.price', 'v.qty', 'v.variation_id');
+            ->select('products.*', 'v.id', 'v.variation', 'v.price', 'v.qty');
 
         if ($beltId) {
             // Filter products where belt_id is in comma-separated belt_ids string
@@ -96,7 +96,8 @@ class ProductRepository implements ProductRepositoryInterface
             $query->whereRaw('FIND_IN_SET(?, products.belt_ids)', [$beltId]);
         }
 
-        return $query->get();
+        return $query->orderBy('products.product_id', 'desc')
+            ->paginate($perPage, ['*'], 'page', $page);
     }
 }
 

@@ -22,7 +22,7 @@ interface ProductRepositoryInterface
     
     public function getActive(array $filters = []): Collection;
     
-    public function getProductList(?int $beltId = null): Collection;
+    public function getProductList(?int $beltId = null, int $perPage = 10, int $page = 1): LengthAwarePaginator;
 }
 
 

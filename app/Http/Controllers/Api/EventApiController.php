@@ -30,14 +30,62 @@ class EventApiController extends Controller
     public function index(Request $request)
     {
         try {
-            $categoryId = $request->input('category_id');
-            $events = $this->eventService->getAllEvents(15, $categoryId);
+            $request->validate([
+                'per_page' => 'nullable|integer|min:1|max:100',
+                'page' => 'nullable|integer|min:1',
+                'upcoming_event' => 'nullable|array',
+                'upcoming_event.*' => 'string',
+                // category may be passed as a single string or an array of names
+                'category' => 'nullable',
+            ]);
 
-            // Return unified structure
-            return ApiResponseHelper::success(
-                \App\Http\Resources\EventResource::collection($events),
-                'Events retrieved successfully'
-            );
+            $perPage = (int) $request->input('per_page', 15);
+            $page = (int) $request->input('page', 1);
+
+            // upcoming_event: array of strings; if contains 'All' -> all upcoming
+            $upcomingEvent = $request->input('upcoming_event', null);
+
+            // category: accept string or array. Normalize to array of names or null.
+            $categoryInput = $request->input('category', null);
+            $categoryNames = null;
+            if (!is_null($categoryInput) && $categoryInput !== '') {
+                if (is_array($categoryInput)) {
+                    $categoryNames = array_values(array_filter(array_map('trim', $categoryInput), function ($v) { return $v !== ''; }));
+                } else {
+                    // support comma-separated string like "Tournaments,Workshops" or single value
+                    $categoryNames = array_values(array_filter(array_map('trim', explode(',', (string) $categoryInput)), function ($v) { return $v !== ''; }));
+                }
+
+                if (empty($categoryNames)) {
+                    $categoryNames = null;
+                }
+            }
+
+            $events = $this->eventService->getAllEvents($perPage, $categoryNames, $upcomingEvent);
+            $categories = DB::table('categories')
+            ->where('active', 1)
+            ->pluck('name')
+            ->toArray();
+            // Map each paginator item through EventResource to sanitize fields
+            $items = array_map(function ($ev) use ($request) {
+                return (new \App\Http\Resources\EventResource($ev))->toArray($request);
+            }, $events->items());
+
+            // Build grouped response under data.upcoming_event with pagination meta
+            $responseData = [
+                'category' => $categories,
+                'upcoming_event' => $items,
+                'pagination' => [
+                    'current_page' => $events->currentPage(),
+                    'per_page' => $events->perPage(),
+                    'total' => $events->total(),
+                    'last_page' => $events->lastPage(),
+                    'from' => $events->firstItem(),
+                    'to' => $events->lastItem(),
+                ],
+            ];
+
+            return ApiResponseHelper::success($responseData, 'Events retrieved successfully');
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }

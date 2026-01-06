@@ -34,12 +34,36 @@ class EventRepository
         return $this->model->find($id);
     }
 
-    public function getAll(int $perPage = 15, ?int $categoryId = null)
+    /**
+     * Get all events with optional category filter (accepts category id or array of category names)
+     * and optional upcoming event type filters.
+     *
+     * @param int $perPage
+     * @param mixed $category null|int|array
+     * @param mixed $upcomingEvent null|array
+     */
+    public function getAll(int $perPage = 15, $category = null, $upcomingEvent = null)
     {
         $query = $this->model->with('category')->orderBy('from_date', 'desc');
 
-        if ($categoryId) {
-            $query->where('category_id', $categoryId);
+        if ($category) {
+            if (is_array($category)) {
+                // filter by category names via relation
+                $query->whereHas('category', function ($q) use ($category) {
+                    $q->whereIn('name', $category);
+                });
+            } else {
+                // assume integer id
+                $query->where('category_id', (int) $category);
+            }
+        }
+
+        if ($upcomingEvent && is_array($upcomingEvent)) {
+            $filtered = array_values(array_filter($upcomingEvent, function ($v) { return $v !== '' && $v !== null; }));
+            if (!empty($filtered) && !in_array('All', $filtered, true)) {
+                // assume upcoming_event contains event types; filter by 'type' column
+                $query->whereIn('type', $filtered);
+            }
         }
 
         return $query->paginate($perPage);
