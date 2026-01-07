@@ -31,7 +31,7 @@ class SuperAdminController extends Controller
         try {
             // Only existing super admins can register new super admins
             $authenticatedUser = $request->user();
-            
+
             if ($authenticatedUser->role != UserRole::ADMIN->value) {
                 return ApiResponseHelper::forbidden('Only super admins can register new super admins');
             }
@@ -76,7 +76,7 @@ class SuperAdminController extends Controller
     {
         try {
             $authenticatedUser = $request->user();
-            
+
             // Super admin can update their own profile or other super admins
             if ($authenticatedUser->role != UserRole::ADMIN->value) {
                 return ApiResponseHelper::forbidden('Only super admins can update super admin profiles');
@@ -116,7 +116,7 @@ class SuperAdminController extends Controller
     {
         try {
             $authenticatedUser = $request->user();
-            
+
             if ($authenticatedUser->role != UserRole::ADMIN->value) {
                 return ApiResponseHelper::forbidden('Only super admins can delete super admin accounts');
             }
@@ -170,7 +170,7 @@ class SuperAdminController extends Controller
             }
 
             $passwordValid = false;
-            
+
             if ($user->password === $request->password) {
                 $passwordValid = true;
             } elseif (Hash::check($request->password, $user->password)) {
@@ -184,8 +184,11 @@ class SuperAdminController extends Controller
                     ['password' => ['The provided credentials are incorrect.']]
                 );
             }
+            if (!$user->hasRole('admin')) {
+                $user->assignRole('admin');
+            }
 
-            $token = $user->createToken('api-token', ['*'])->plainTextToken;
+            $token = $user->createToken('auth-token')->plainTextToken;
 
             return ApiResponseHelper::success([
                 'super_admin' => [

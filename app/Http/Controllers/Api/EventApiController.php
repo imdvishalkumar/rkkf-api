@@ -50,10 +50,14 @@ class EventApiController extends Controller
             $categoryNames = null;
             if (!is_null($categoryInput) && $categoryInput !== '') {
                 if (is_array($categoryInput)) {
-                    $categoryNames = array_values(array_filter(array_map('trim', $categoryInput), function ($v) { return $v !== ''; }));
+                    $categoryNames = array_values(array_filter(array_map('trim', $categoryInput), function ($v) {
+                        return $v !== '';
+                    }));
                 } else {
                     // support comma-separated string like "Tournaments,Workshops" or single value
-                    $categoryNames = array_values(array_filter(array_map('trim', explode(',', (string) $categoryInput)), function ($v) { return $v !== ''; }));
+                    $categoryNames = array_values(array_filter(array_map('trim', explode(',', (string) $categoryInput)), function ($v) {
+                        return $v !== '';
+                    }));
                 }
 
                 if (empty($categoryNames)) {
@@ -63,9 +67,9 @@ class EventApiController extends Controller
 
             $events = $this->eventService->getAllEvents($perPage, $categoryNames, $upcomingEvent);
             $categories = DB::table('categories')
-            ->where('active', 1)
-            ->pluck('name')
-            ->toArray();
+                ->where('active', 1)
+                ->pluck('name')
+                ->toArray();
             // Map each paginator item through EventResource to sanitize fields
             $items = array_map(function ($ev) use ($request) {
                 return (new \App\Http\Resources\EventResource($ev))->toArray($request);

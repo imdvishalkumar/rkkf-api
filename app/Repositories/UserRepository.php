@@ -51,26 +51,31 @@ class UserRepository implements UserRepositoryInterface
             }
         }
 
-        // Ensure role is an integer and valid enum value
+        // Ensure role is a valid enum value
         if (isset($data['role'])) {
-            $data['role'] = (int)$data['role'];
+            // If it's a UserRole enum, get the value
+            if ($data['role'] instanceof \App\Enums\UserRole) {
+                $data['role'] = $data['role']->value;
+            }
+
             // Validate role value exists in enum
-            if (!in_array($data['role'], [0, 1, 2], true)) {
-                throw new \InvalidArgumentException("Invalid role value: {$data['role']}. Must be 0, 1, or 2.");
+            if (!in_array($data['role'], \App\Enums\UserRole::values(), true)) {
+                $validRoles = implode(', ', \App\Enums\UserRole::values());
+                throw new \InvalidArgumentException("Invalid role value: {$data['role']}. Must be one of: {$validRoles}.");
             }
         }
 
         // Use DB facade to insert directly, bypassing enum casting during insert
         // Then retrieve the model to get enum-cast attributes
         $userId = \Illuminate\Support\Facades\DB::table('users')->insertGetId($data);
-        
+
         return $this->find($userId);
     }
 
     public function update(int $id, array $data): bool
     {
         $user = $this->find($id);
-        
+
         if (!$user) {
             return false;
         }
@@ -92,7 +97,7 @@ class UserRepository implements UserRepositoryInterface
     public function delete(int $id): bool
     {
         $user = $this->find($id);
-        
+
         if (!$user) {
             return false;
         }

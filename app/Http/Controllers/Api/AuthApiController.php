@@ -38,7 +38,7 @@ class AuthApiController extends Controller
 
             // Check password - support both plain text (legacy) and hashed passwords
             $passwordValid = false;
-            
+
             // Check plain text password (for existing system compatibility)
             if ($user->password === $request->password) {
                 $passwordValid = true;
@@ -62,11 +62,24 @@ class AuthApiController extends Controller
             // Revoke all existing tokens (optional - for single device login)
             // $user->tokens()->delete();
 
+            // Ensure role is assigned in Spatie (self-healing)
+            $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string) $user->role;
+            $spatieRole = match ($roleString) {
+                'admin', '1' => 'admin',
+                'instructor', '2' => 'instructor',
+                'user', '0' => 'student',
+                default => null
+            };
+
+            if ($spatieRole && !$user->hasRole($spatieRole)) {
+                $user->assignRole($spatieRole);
+            }
+
             // Create new token
-            $token = $user->createToken('api-token', ['*'])->plainTextToken;
+            $token = $user->createToken('auth-token')->plainTextToken;
 
             // Get role string value (user->role is now a UserRole enum, ->value gives the string)
-            $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string)$user->role;
+            $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string) $user->role;
             $userKey = $roleString; // Use role string as response key
 
             return ApiResponseHelper::success([

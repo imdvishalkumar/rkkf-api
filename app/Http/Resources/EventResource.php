@@ -25,7 +25,7 @@ class EventResource extends JsonResource
             'shares' => $this->shares,
             'time_ago' => $this->time_ago, // Accessor
             'is_liked' => $this->is_liked, // Accessor
-            'category' => $this->category,
+            'category' => $this->category ? $this->category->name : null,
         ];
     }
 }

@@ -7,12 +7,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 use App\Enums\UserRole;
 
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasApiTokens;
+    use HasFactory, Notifiable, HasApiTokens, HasRoles;
 
     /**
      * The attributes that are mass assignable.
@@ -66,27 +67,27 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is a regular user (using enum)
+     * Check if user is a regular user (using RBAC)
      */
     public function isUser(): bool
     {
-        return $this->role === UserRole::USER;
+        return $this->hasRole('student');
     }
 
     /**
-     * Check if user is admin (using enum)
+     * Check if user is admin (using RBAC)
      */
     public function isAdmin(): bool
     {
-        return $this->role === UserRole::ADMIN;
+        return $this->hasRole('admin');
     }
 
     /**
-     * Check if user is instructor (using enum)
+     * Check if user is instructor (using RBAC)
      */
     public function isInstructor(): bool
     {
-        return $this->role === UserRole::INSTRUCTOR;
+        return $this->hasRole('instructor');
     }
 
     /**

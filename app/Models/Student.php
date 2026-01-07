@@ -11,6 +11,7 @@ class Student extends Model
     protected $table = 'students';
     protected $primaryKey = 'student_id';
     public $incrementing = true;
+    public $timestamps = false;
 
     protected $fillable = [
         'firstname',
@@ -31,6 +32,7 @@ class Student extends Model
         'branch_id',
         'pincode',
         'active',
+        'profile_img',
     ];
 
     protected $hidden = [
