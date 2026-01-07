@@ -64,6 +64,30 @@ class Event extends Model
         return false; // Dummy logic as requested
     }
 
+    /**
+     * Get the full URL for the image.
+     */
+    public function getImageAttribute($value)
+    {
+        $default = asset('images/default_event.png');
+
+        if (empty($value)) {
+            return $default;
+        }
+
+        // If it's already a full URL, return it
+        if (filter_var($value, FILTER_VALIDATE_URL)) {
+            return $value;
+        }
+
+        // Check if file exists in public directory
+        if (!file_exists(public_path($value))) {
+            return $default;
+        }
+
+        return asset($value);
+    }
+
     // Accessors for API consistency
     public function getTitleAttribute()
     {
