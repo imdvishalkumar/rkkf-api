@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\FeeApiController;
 use App\Http\Controllers\Api\StudentApiController;
 use App\Http\Controllers\Api\OrderApiController;
 use App\Http\Controllers\Api\EventApiController;
+use App\Http\Controllers\Api\EventLikeController;
 use App\Http\Controllers\Api\ExamApiController;
 use App\Http\Controllers\Api\ProductApiController;
 use App\Http\Controllers\Api\CartApiController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Api\FrontendAPI\InstructorController as FrontendInstruc
 */
 
 Route::post('/login', [AuthApiController::class, 'login']);
+Route::post('/register', [AuthApiController::class, 'register']);
 Route::post('/admin/login', [SuperAdminController::class, 'login']);
 
 /*
@@ -39,11 +41,35 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthApiController::class, 'logout']);
 
     Route::get('/me', function (\Illuminate\Http\Request $request) {
-        return $request->user();
+        $user = $request->user();
+        $token = $user?->currentAccessToken();
+        
+        return response()->json([
+            'user' => $user,
+            'user_id' => $user?->user_id,
+            'role' => $user?->role?->value,
+            'token_id' => $token?->id,
+            'token_abilities' => $token?->abilities ?? [],
+        ]);
     });
 
     // Admin Specific APIs (role check done in controller)
     Route::prefix('admin')->group(function () {
+        // Test route to verify authentication
+        Route::get('test-auth', function (\Illuminate\Http\Request $request) {
+            \Illuminate\Support\Facades\Log::info('Admin test-auth route hit', [
+                'user' => $request->user()?->user_id,
+                'token' => $request->bearerToken() ? 'present' : 'missing',
+                'authenticated' => $request->user() !== null,
+            ]);
+            return response()->json([
+                'authenticated' => $request->user() !== null,
+                'user_id' => $request->user()?->user_id,
+                'role' => $request->user()?->role?->value,
+                'token_present' => $request->bearerToken() !== null,
+            ]);
+        });
+        
         // Unified User Management (Creates User + Student Profile)
         Route::post('unified-users', [UnifiedUserController::class, 'store']);
         Route::put('unified-users/student/{id}', [UnifiedUserController::class, 'updateStudentProfile']);
@@ -84,6 +110,10 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{id}', [EventApiController::class, 'show']);
         Route::put('{id}', [EventApiController::class, 'update']);
         Route::delete('{id}', [EventApiController::class, 'destroy']);
+        
+        // Event like endpoints (require authentication)
+        Route::get('{event_id}/like', [EventLikeController::class, 'getLikeStatus']);
+        Route::post('{event_id}/like', [EventLikeController::class, 'toggleLike']);
     });
 
     Route::prefix('products')->group(function () {

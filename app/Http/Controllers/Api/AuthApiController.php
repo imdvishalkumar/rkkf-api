@@ -6,16 +6,24 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use App\Models\User;
+use App\Models\Student;
 use App\Helpers\ApiResponseHelper;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Log;
 use App\Enums\UserRole;
+use App\Http\Requests\RegisterRequest;
 
 class AuthApiController extends Controller
 {
     /**
      * Login user and generate API token
+     * 
+     * Role-Endpoint Binding:
+     * - user: Allowed
+     * - instructor: Allowed
+     * - admin: NOT ALLOWED (must use /admin/login)
      * 
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
@@ -61,14 +69,11 @@ class AuthApiController extends Controller
                 );
             }
 
-            // Revoke all existing tokens (optional - for single device login)
-            // $user->tokens()->delete();
-
-            // Validate Role
+            // Validate Role - Enforce Role-Endpoint Binding
             $role = $user->role; // Already cast to UserRole enum
 
             if (!in_array($role, [UserRole::USER, UserRole::INSTRUCTOR])) {
-                Log::warning('Login violation', [
+                Log::warning('RBAC violation', [
                     'email' => $request->email,
                     'endpoint' => $request->path(),
                     'attempted_role' => $role->value,
@@ -76,12 +81,63 @@ class AuthApiController extends Controller
                 return ApiResponseHelper::forbidden('Admin accounts must login via /admin/login');
             }
 
-            // Create new token
-            $token = $user->createToken('auth-token')->plainTextToken;
+            // Spatie Role Safety Validation - Check role exists before assignment
+            $spatieRoleName = $role->spatieRole();
+            
+            if (!User::validateSpatieRoleExists($spatieRoleName)) {
+                Log::critical('Role misconfiguration detected', [
+                    'email' => $request->email,
+                    'endpoint' => $request->path(),
+                    'role' => $role->value,
+                    'spatie_role_name' => $spatieRoleName,
+                ]);
+                abort(500, 'System role misconfigured');
+            }
+
+            // Ensure user has Spatie role assigned (validates existence first)
+            $user->ensureSpatieRole();
+
+            // Revoke all existing tokens (optional - for single device login)
+            // $user->tokens()->delete();
+
+            // Create token with role-specific scope
+            $tokenScope = $role->value; // 'user' or 'instructor'
+            $token = $user->createToken('auth-token', [$tokenScope])->plainTextToken;
 
             // Get role string value (user->role is now a UserRole enum, ->value gives the string)
             $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string) $user->role;
             $userKey = $roleString; // Use role string as response key
+
+            // Get profile image from students table if email matches
+            $profileImgUrl = null;
+            $student = Student::where('email', $user->email)->first();
+            
+            if ($student && !empty($student->profile_img) && $student->profile_img !== 'default.png') {
+                // Student has profile image - use the same path format as unified-users API
+                // File is stored in storage/app/public/profile_images/ and accessible via /storage/profile_images/
+                $profileImgPath = 'profile_images/' . $student->profile_img;
+                if (Storage::disk('public')->exists($profileImgPath)) {
+                    // Use Storage URL which returns: /storage/profile_images/filename.jpg
+                    $profileImgUrl = Storage::disk('public')->url($profileImgPath);
+                } else {
+                    // Image file doesn't exist in storage, use default
+                    $defaultImagePath = 'profile_images/default.png';
+                    if (Storage::disk('public')->exists($defaultImagePath)) {
+                        $profileImgUrl = Storage::disk('public')->url($defaultImagePath);
+                    } else {
+                        $profileImgUrl = asset('images/default-avatar.png');
+                    }
+                }
+            } else {
+                // No student record, no profile_img, or default.png - use default image
+                $defaultImagePath = 'profile_images/default.png';
+                if (Storage::disk('public')->exists($defaultImagePath)) {
+                    $profileImgUrl = Storage::disk('public')->url($defaultImagePath);
+                } else {
+                    // Use a generic placeholder or default avatar URL
+                    $profileImgUrl = asset('images/default-avatar.png');
+                }
+            }
 
             return ApiResponseHelper::success([
                 $userKey => [
@@ -91,6 +147,7 @@ class AuthApiController extends Controller
                     'email' => $user->email,
                     'mobile' => $user->mobile,
                     'role' => $roleString,
+                    'profile_img' => $profileImgUrl,
                 ],
                 'token' => $token,
                 'token_type' => 'Bearer',
@@ -107,6 +164,150 @@ class AuthApiController extends Controller
         }
     }
 
+
+    /**
+     * Register user and generate API token
+     * 
+     * Supports multipart/form-data with file upload for profile image
+     * 
+     * @param RegisterRequest $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function register(RegisterRequest $request)
+    {
+        $profileImgPath = null;
+        
+        try {
+            $data = $request->validated();
+
+            // Handle profile image upload
+            if ($request->hasFile('profile_img')) {
+                $file = $request->file('profile_img');
+                $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $profileImgPath = $file->storeAs('profile_images', $fileName, 'public');
+            }
+
+            // Handle role mapping
+            $roleInput = $data['role'];
+            if ($roleInput instanceof UserRole) {
+                $role = $roleInput;
+            } else {
+                $role = UserRole::tryFrom($roleInput) ?? UserRole::USER;
+            }
+
+            // Spatie Role Safety Validation - Check role exists before assignment
+            $spatieRoleName = $role->spatieRole();
+            
+            if (!User::validateSpatieRoleExists($spatieRoleName)) {
+                // If file was uploaded but role validation fails, delete it
+                if ($profileImgPath) {
+                    Storage::disk('public')->delete($profileImgPath);
+                }
+                
+                Log::critical('Role misconfiguration detected', [
+                    'email' => $data['email'],
+                    'endpoint' => $request->path(),
+                    'role' => $role->value,
+                    'spatie_role_name' => $spatieRoleName,
+                ]);
+                abort(500, 'System role misconfigured');
+            }
+
+            // Prepare user data
+            // Note: users table doesn't have profile_img column, only students table has it
+            $userData = [
+                'firstname' => $data['firstname'],
+                'lastname' => $data['lastname'],
+                'email' => $data['email'],
+                'mobile' => $data['mobile'],
+                'password' => $data['password'],
+                'role' => $role->value,
+            ];
+
+            // Note: profile_img is not stored in users table
+            // If profile image is uploaded, it's saved to storage but not in DB
+            // Profile images are only stored in students table (via unified-users endpoint)
+
+            // Create user via repository
+            $userRepository = app(\App\Repositories\Contracts\UserRepositoryInterface::class);
+            $user = $userRepository->create($userData);
+
+            // Ensure user has Spatie role assigned (validates existence first)
+            $user->ensureSpatieRole();
+
+            // Create token with role-specific scope
+            $tokenScope = $role->value;
+            $token = $user->createToken('auth-token', [$tokenScope])->plainTextToken;
+
+            // Get role string value
+            $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string) $user->role;
+            $userKey = $roleString;
+
+            // Get profile image from students table if email matches
+            $profileImgUrl = null;
+            $student = Student::where('email', $user->email)->first();
+            
+            if ($student && !empty($student->profile_img)) {
+                // Student has profile image - construct full path
+                $profileImgPath = 'profile_images/' . $student->profile_img;
+                if (Storage::disk('public')->exists($profileImgPath)) {
+                    $profileImgUrl = Storage::disk('public')->url($profileImgPath);
+                } else {
+                    // Image file doesn't exist, use default
+                    $defaultImagePath = 'profile_images/default.png';
+                    if (Storage::disk('public')->exists($defaultImagePath)) {
+                        $profileImgUrl = Storage::disk('public')->url($defaultImagePath);
+                    } else {
+                        $profileImgUrl = asset('images/default-avatar.png');
+                    }
+                }
+            } else {
+                // No student record or no profile_img, use default
+                // Note: If profile image was uploaded during registration, it's saved to storage
+                // but not in users table. Profile images are only stored in students table (via unified-users endpoint)
+                $defaultImagePath = 'profile_images/default.png';
+                if (Storage::disk('public')->exists($defaultImagePath)) {
+                    $profileImgUrl = Storage::disk('public')->url($defaultImagePath);
+                } else {
+                    // Use a generic placeholder or default avatar URL
+                    $profileImgUrl = asset('images/default-avatar.png');
+                }
+            }
+
+            return ApiResponseHelper::success([
+                $userKey => [
+                    'user_id' => $user->user_id,
+                    'firstname' => $user->firstname,
+                    'lastname' => $user->lastname,
+                    'email' => $user->email,
+                    'mobile' => $user->mobile,
+                    'role' => $roleString,
+                    'profile_img' => $profileImgUrl, // Always default since users table doesn't store profile_img
+                ],
+                'token' => $token,
+                'token_type' => 'Bearer',
+            ], 'Registration successful');
+
+        } catch (ValidationException $e) {
+            // If file was uploaded but validation fails, delete it
+            if (isset($profileImgPath) && $profileImgPath) {
+                Storage::disk('public')->delete($profileImgPath);
+            }
+            
+            return ApiResponseHelper::validationError($e->errors());
+        } catch (\Exception $e) {
+            // If file was uploaded but registration fails, delete it
+            if (isset($profileImgPath) && $profileImgPath) {
+                Storage::disk('public')->delete($profileImgPath);
+            }
+            
+            return ApiResponseHelper::error(
+                'Registration failed',
+                500,
+                ['error' => $e->getMessage()]
+            );
+        }
+    }
 
     /**
      * Unified logout endpoint for all roles
@@ -144,5 +345,3 @@ class AuthApiController extends Controller
         }
     }
 }
-
-

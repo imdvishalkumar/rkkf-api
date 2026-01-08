@@ -11,6 +11,7 @@ use App\Http\Requests\AdminAPI\UpdateSuperAdminRequest;
 use App\Enums\UserRole;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use App\Models\User;
 
 class SuperAdminController extends Controller
 {
@@ -25,6 +26,11 @@ class SuperAdminController extends Controller
     /**
      * Login Super Admin
      * 
+     * Role-Endpoint Binding:
+     * - admin: Allowed
+     * - user: NOT ALLOWED (must use /login)
+     * - instructor: NOT ALLOWED (must use /login)
+     * 
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
@@ -36,7 +42,7 @@ class SuperAdminController extends Controller
                 'password' => 'required|string',
             ]);
 
-            $user = \App\Models\User::where('email', $request->email)
+            $user = User::where('email', $request->email)
                 ->where('role', UserRole::ADMIN->value)
                 ->first();
 
@@ -64,11 +70,11 @@ class SuperAdminController extends Controller
                 );
             }
 
-            // Validate Role
+            // Validate Role - Enforce Role-Endpoint Binding
             $role = $user->role; // Already cast to UserRole enum
 
             if ($role !== UserRole::ADMIN) {
-                Log::warning('Login violation', [
+                Log::warning('RBAC violation', [
                     'email' => $request->email,
                     'endpoint' => $request->path(),
                     'attempted_role' => $role->value,
@@ -76,8 +82,25 @@ class SuperAdminController extends Controller
                 return ApiResponseHelper::forbidden('Only admin accounts may login here');
             }
 
-            // Create token
-            $token = $user->createToken('auth-token')->plainTextToken;
+            // Spatie Role Safety Validation - Check role exists before assignment
+            $spatieRoleName = $role->spatieRole();
+            
+            if (!User::validateSpatieRoleExists($spatieRoleName)) {
+                Log::critical('Role misconfiguration detected', [
+                    'email' => $request->email,
+                    'endpoint' => $request->path(),
+                    'role' => $role->value,
+                    'spatie_role_name' => $spatieRoleName,
+                ]);
+                abort(500, 'System role misconfigured');
+            }
+
+            // Ensure user has Spatie role assigned (validates existence first)
+            $user->ensureSpatieRole();
+
+            // Create token with admin scope
+            $tokenScope = $role->value; // 'admin'
+            $token = $user->createToken('auth-token', [$tokenScope])->plainTextToken;
 
             return ApiResponseHelper::success([
                 'super_admin' => [
@@ -103,4 +126,3 @@ class SuperAdminController extends Controller
         }
     }
 }
-

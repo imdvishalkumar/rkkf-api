@@ -3,14 +3,33 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Event extends Model
 {
     protected $table = 'event';
 
-    public function category()
+    public function category(): BelongsTo
     {
         return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    /**
+     * Get the likes for the event.
+     */
+    public function likes(): HasMany
+    {
+        return $this->hasMany(EventLike::class, 'event_id', 'event_id');
+    }
+
+    /**
+     * Get the active likes (is_liked = true) for the event.
+     */
+    public function activeLikes(): HasMany
+    {
+        return $this->hasMany(EventLike::class, 'event_id', 'event_id')
+            ->where('is_liked', true);
     }
 
     protected $primaryKey = 'event_id';
@@ -61,7 +80,8 @@ class Event extends Model
 
     public function getIsLikedAttribute()
     {
-        return false; // Dummy logic as requested
+        // This will be overridden in EventResource with actual user data
+        return false;
     }
 
     /**

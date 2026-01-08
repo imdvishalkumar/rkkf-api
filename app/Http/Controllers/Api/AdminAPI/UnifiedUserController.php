@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\AdminAPI;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use App\Services\UserService;
 use App\Services\StudentService;
 use App\Helpers\ApiResponseHelper;
@@ -40,6 +41,8 @@ class UnifiedUserController extends Controller
         \Illuminate\Support\Facades\Log::info('UnifiedUserController@store reached', [
             'user_id' => $request->user()?->user_id,
             'role' => $request->user()?->role?->value,
+            'authenticated' => $request->user() !== null,
+            'bearer_token' => $request->bearerToken() ? 'present' : 'missing',
         ]);
         DB::beginTransaction();
         try {
@@ -51,6 +54,14 @@ class UnifiedUserController extends Controller
 
             $data = $request->validated();
 
+            // Handle profile image upload
+            $profileImgPath = null;
+            if ($request->hasFile('profile_img')) {
+                $file = $request->file('profile_img');
+                $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $profileImgPath = $file->storeAs('profile_images', $fileName, 'public');
+            }
+
             // Handle role mapping
             $roleInput = $data['role'];
             if ($roleInput instanceof UserRole) {
@@ -60,6 +71,7 @@ class UnifiedUserController extends Controller
             }
 
             // 1. Create User via Repository
+            // Note: users table doesn't have profile_img column, only students table has it
             $userData = [
                 'firstname' => $data['firstname'],
                 'lastname' => $data['lastname'],
@@ -88,7 +100,7 @@ class UnifiedUserController extends Controller
                 'belt_id' => $data['belt_id'] ?? 1,
                 'address' => $data['address'] ?? 'N/A',
                 'pincode' => $data['pincode'] ?? '000000',
-                'profile_img' => 'default.png',
+                'profile_img' => $profileImgPath ? basename($profileImgPath) : 'default.png', // Only students table has profile_img column
             ];
 
             $student = $this->studentRepository->create($studentData);
@@ -112,6 +124,12 @@ class UnifiedUserController extends Controller
 
         } catch (Exception $e) {
             DB::rollBack();
+            
+            // If file was uploaded but creation fails, delete it
+            if (isset($profileImgPath) && $profileImgPath) {
+                Storage::disk('public')->delete($profileImgPath);
+            }
+            
             return ApiResponseHelper::error(
                 'Failed to create unified user: ' . $e->getMessage(),
                 500
