@@ -30,7 +30,7 @@ class UserManagementController extends Controller
         try {
             $authenticatedUser = $request->user();
 
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can access user management');
             }
 
@@ -62,7 +62,7 @@ class UserManagementController extends Controller
         try {
             $authenticatedUser = $request->user();
 
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can access user management');
             }
 
@@ -99,7 +99,7 @@ class UserManagementController extends Controller
         try {
             $authenticatedUser = $request->user();
 
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can create users');
             }
 
@@ -138,7 +138,7 @@ class UserManagementController extends Controller
         try {
             $authenticatedUser = $request->user();
 
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can update users');
             }
 
@@ -177,7 +177,7 @@ class UserManagementController extends Controller
         try {
             $authenticatedUser = $request->user();
 
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can delete users');
             }
 

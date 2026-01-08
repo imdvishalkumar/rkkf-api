@@ -71,13 +71,8 @@ class UnifiedUserController extends Controller
 
             $user = $this->userRepository->create($userData);
 
-            // 2. Map Enum Role to Spatie Role Name
-            // UserRole::USER ('user') -> Spatie role 'student'
-            // UserRole::INSTRUCTOR ('instructor') -> Spatie role 'instructor'
-            $spatieRole = ($role === UserRole::USER) ? 'student' : $role->value;
-            $user->assignRole($spatieRole);
 
-            // 3. Create Student via Repository
+            // 2. Create Student via Repository
             // Data mapping for legacy NOT NULL fields without defaults
             $studentData = [
                 'firstname' => $data['firstname'],

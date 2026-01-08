@@ -11,7 +11,6 @@ use App\Http\Requests\AdminAPI\UpdateSuperAdminRequest;
 use App\Enums\UserRole;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
-use Spatie\Permission\Models\Role;
 
 class SuperAdminController extends Controller
 {
@@ -22,128 +21,6 @@ class SuperAdminController extends Controller
         $this->userService = $userService;
     }
 
-    /**
-     * Register Super Admin
-     * 
-     * @param RegisterSuperAdminRequest $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function register(RegisterSuperAdminRequest $request)
-    {
-        try {
-            // Only existing super admins can register new super admins
-            $authenticatedUser = $request->user();
-
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
-                return ApiResponseHelper::forbidden('Only super admins can register new super admins');
-            }
-
-            $data = $request->validated();
-            $data['role'] = UserRole::ADMIN->value; // Role 1 = Super Admin
-
-            $result = $this->userService->createUser($data);
-
-            $token = $result['user']->createToken('api-token', ['*'])->plainTextToken;
-
-            return ApiResponseHelper::success([
-                'super_admin' => [
-                    'user_id' => $result['user']->user_id,
-                    'firstname' => $result['user']->firstname,
-                    'lastname' => $result['user']->lastname,
-                    'email' => $result['user']->email,
-                    'mobile' => $result['user']->mobile,
-                    'role' => ApiResponseHelper::getRoleValue($result['user']->role),
-                ],
-                'token' => $token,
-                'token_type' => 'Bearer',
-            ], 'Super Admin registered successfully');
-
-        } catch (\Exception $e) {
-            return ApiResponseHelper::error(
-                'Failed to register super admin',
-                ApiResponseHelper::getStatusCode($e),
-                ['error' => $e->getMessage()]
-            );
-        }
-    }
-
-    /**
-     * Update Super Admin
-     * 
-     * @param UpdateSuperAdminRequest $request
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function update(UpdateSuperAdminRequest $request, $id)
-    {
-        try {
-            $authenticatedUser = $request->user();
-
-            // Super admin can update their own profile or other super admins
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
-                return ApiResponseHelper::forbidden('Only super admins can update super admin profiles');
-            }
-
-            $data = $request->validated();
-            $result = $this->userService->updateUser($id, $data);
-
-            return ApiResponseHelper::success([
-                'super_admin' => [
-                    'user_id' => $result['user']->user_id,
-                    'firstname' => $result['user']->firstname,
-                    'lastname' => $result['user']->lastname,
-                    'email' => $result['user']->email,
-                    'mobile' => $result['user']->mobile,
-                    'role' => ApiResponseHelper::getRoleValue($result['user']->role),
-                ],
-            ], $result['message']);
-
-        } catch (\Exception $e) {
-            return ApiResponseHelper::error(
-                'Failed to update super admin',
-                ApiResponseHelper::getStatusCode($e),
-                ['error' => $e->getMessage()]
-            );
-        }
-    }
-
-    /**
-     * Delete Super Admin (Soft Delete)
-     * 
-     * @param Request $request
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function delete(Request $request, $id)
-    {
-        try {
-            $authenticatedUser = $request->user();
-
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
-                return ApiResponseHelper::forbidden('Only super admins can delete super admin accounts');
-            }
-
-            // Prevent self-deletion
-            if ($authenticatedUser->user_id == $id) {
-                return ApiResponseHelper::error('You cannot delete your own account', 403);
-            }
-
-            $deleted = $this->userService->deleteUser($id);
-
-            if ($deleted) {
-                return ApiResponseHelper::success(null, 'Super Admin deleted successfully');
-            }
-
-            return ApiResponseHelper::error('Failed to delete super admin', 500);
-
-        } catch (\Exception $e) {
-            return ApiResponseHelper::error(
-                'Failed to delete super admin',
-                ApiResponseHelper::getStatusCode($e),
-                ['error' => $e->getMessage()]
-            );
-        }
-    }
 
     /**
      * Login Super Admin
@@ -187,11 +64,11 @@ class SuperAdminController extends Controller
                 );
             }
 
-            // 1. Identify and Validate Role
+            // Validate Role
             $role = $user->role; // Already cast to UserRole enum
 
             if ($role !== UserRole::ADMIN) {
-                Log::warning('RBAC login violation', [
+                Log::warning('Login violation', [
                     'email' => $request->email,
                     'endpoint' => $request->path(),
                     'attempted_role' => $role->value,
@@ -199,23 +76,8 @@ class SuperAdminController extends Controller
                 return ApiResponseHelper::forbidden('Only admin accounts may login here');
             }
 
-            // 2. Safety Fallback: Check if Spatie role exists
-            if (!Role::where('name', 'admin')->exists()) {
-                Log::critical('RBAC role misconfiguration', [
-                    'role_name' => 'admin',
-                    'user_id' => $user->user_id
-                ]);
-                return response()->json([
-                    'status' => false,
-                    'message' => 'Role misconfiguration. Contact system administrator.'
-                ], 500);
-            }
-
-            // 3. Sync Spatie Role
-            $user->syncRoles(['admin']);
-
-            // 4. Create token with admin scope
-            $token = $user->createToken('auth-token', ['admin'])->plainTextToken;
+            // Create token
+            $token = $user->createToken('auth-token')->plainTextToken;
 
             return ApiResponseHelper::success([
                 'super_admin' => [

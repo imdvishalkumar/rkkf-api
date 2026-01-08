@@ -29,8 +29,8 @@ class InstructorManagementController extends Controller
     {
         try {
             $authenticatedUser = $request->user();
-            
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can access instructor management');
             }
 
@@ -61,15 +61,15 @@ class InstructorManagementController extends Controller
     {
         try {
             $authenticatedUser = $request->user();
-            
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can access instructor management');
             }
 
             $instructor = $this->userService->getUserById($id);
 
             // Verify it's an instructor
-            if ($instructor->role != UserRole::INSTRUCTOR->value) {
+            if (!$instructor->isInstructor()) {
                 return ApiResponseHelper::error('User is not an instructor', 404);
             }
 
@@ -103,8 +103,8 @@ class InstructorManagementController extends Controller
     {
         try {
             $authenticatedUser = $request->user();
-            
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can create instructors');
             }
 
@@ -144,8 +144,8 @@ class InstructorManagementController extends Controller
     {
         try {
             $authenticatedUser = $request->user();
-            
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can update instructors');
             }
 
@@ -183,8 +183,8 @@ class InstructorManagementController extends Controller
     {
         try {
             $authenticatedUser = $request->user();
-            
-            if ($authenticatedUser->role != UserRole::ADMIN->value) {
+
+            if (!$authenticatedUser->isAdmin()) {
                 return ApiResponseHelper::forbidden('Only super admins can delete instructors');
             }
 
