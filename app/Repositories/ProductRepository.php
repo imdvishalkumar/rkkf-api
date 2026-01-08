@@ -53,7 +53,7 @@ class ProductRepository implements ProductRepositoryInterface
     public function update(int $id, array $data): bool
     {
         $product = $this->find($id);
-        
+
         if (!$product) {
             return false;
         }
@@ -64,7 +64,7 @@ class ProductRepository implements ProductRepositoryInterface
     public function delete(int $id): bool
     {
         $product = $this->find($id);
-        
+
         if (!$product) {
             return false;
         }
@@ -86,13 +86,17 @@ class ProductRepository implements ProductRepositoryInterface
     public function getProductList(?int $beltId = null, int $perPage = 10, int $page = 1): LengthAwarePaginator
     {
         $query = $this->model->newQuery()
-            ->join('variation as v', 'products.product_id', '=', 'v.product_id')
-            ->where('v.qty', '>', 0)
-            ->select('products.*', 'v.id', 'v.variation', 'v.price', 'v.qty');
+            ->with([
+                'variations' => function ($q) {
+                    $q->where('qty', '>', 0);
+                }
+            ])
+            ->whereHas('variations', function ($q) {
+                $q->where('qty', '>', 0);
+            });
 
         if ($beltId) {
             // Filter products where belt_id is in comma-separated belt_ids string
-            // Using FIND_IN_SET for MySQL compatibility
             $query->whereRaw('FIND_IN_SET(?, products.belt_ids)', [$beltId]);
         }
 

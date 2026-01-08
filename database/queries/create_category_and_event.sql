@@ -265,3 +265,4 @@ DELETE FROM `categories` WHERE `id` = 1 AND NOT EXISTS (
   SELECT 1 FROM `event` WHERE `category_id` = 1
 );
 
+

@@ -21,6 +21,18 @@ enum UserRole: string
     }
 
     /**
+     * Get Spatie role name for the internal role
+     */
+    public function spatieRole(): string
+    {
+        return match ($this) {
+            self::USER => 'student',
+            self::INSTRUCTOR => 'instructor',
+            self::ADMIN => 'admin',
+        };
+    }
+
+    /**
      * Check if role is admin
      */
     public function isAdmin(): bool

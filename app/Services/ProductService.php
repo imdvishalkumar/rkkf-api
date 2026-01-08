@@ -29,7 +29,7 @@ class ProductService
     public function getProductById(int $id)
     {
         $product = $this->productRepository->find($id);
-        
+
         if (!$product) {
             throw new Exception('Product not found', 404);
         }
@@ -45,7 +45,7 @@ class ProductService
     public function createProduct(array $data): array
     {
         DB::beginTransaction();
-        
+
         try {
             $product = $this->productRepository->create($data);
 
@@ -66,7 +66,7 @@ class ProductService
     public function updateProduct(int $id, array $data): array
     {
         $product = $this->productRepository->find($id);
-        
+
         if (!$product) {
             throw new Exception('Product not found', 404);
         }
@@ -86,7 +86,7 @@ class ProductService
     public function deleteProduct(int $id): bool
     {
         $product = $this->productRepository->find($id);
-        
+
         if (!$product) {
             throw new Exception('Product not found', 404);
         }

@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     public function up(): void
     {
         Schema::create('cart', function (Blueprint $table) {
@@ -14,7 +13,7 @@ return new class extends Migration
             $table->integer('product_id');
             $table->integer('qty');
             $table->integer('variation_id');
-            
+
             $table->primary('cart_id');
             $table->index('student_id');
         });
@@ -25,6 +24,7 @@ return new class extends Migration
         Schema::dropIfExists('cart');
     }
 };
+
 
 
 

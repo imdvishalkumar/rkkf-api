@@ -27,11 +27,12 @@ class UpdateUserRequest extends FormRequest
                 'max:100',
             ],
             'password' => 'sometimes|nullable|string|min:6',
-            'role' => 'sometimes|required|integer|in:0,1,2',
+            'role' => 'sometimes|required|string|in:user,admin,instructor',
             'mobile' => 'nullable|string|max:15',
         ];
     }
 }
+
 
 
 

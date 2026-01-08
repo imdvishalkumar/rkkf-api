@@ -10,6 +10,8 @@ use App\Http\Requests\AdminAPI\RegisterSuperAdminRequest;
 use App\Http\Requests\AdminAPI\UpdateSuperAdminRequest;
 use App\Enums\UserRole;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Spatie\Permission\Models\Role;
 
 class SuperAdminController extends Controller
 {
@@ -184,11 +186,36 @@ class SuperAdminController extends Controller
                     ['password' => ['The provided credentials are incorrect.']]
                 );
             }
-            if (!$user->hasRole('admin')) {
-                $user->assignRole('admin');
+
+            // 1. Identify and Validate Role
+            $role = $user->role; // Already cast to UserRole enum
+
+            if ($role !== UserRole::ADMIN) {
+                Log::warning('RBAC login violation', [
+                    'email' => $request->email,
+                    'endpoint' => $request->path(),
+                    'attempted_role' => $role->value,
+                ]);
+                return ApiResponseHelper::forbidden('Only admin accounts may login here');
             }
 
-            $token = $user->createToken('auth-token')->plainTextToken;
+            // 2. Safety Fallback: Check if Spatie role exists
+            if (!Role::where('name', 'admin')->exists()) {
+                Log::critical('RBAC role misconfiguration', [
+                    'role_name' => 'admin',
+                    'user_id' => $user->user_id
+                ]);
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Role misconfiguration. Contact system administrator.'
+                ], 500);
+            }
+
+            // 3. Sync Spatie Role
+            $user->syncRoles(['admin']);
+
+            // 4. Create token with admin scope
+            $token = $user->createToken('auth-token', ['admin'])->plainTextToken;
 
             return ApiResponseHelper::success([
                 'super_admin' => [

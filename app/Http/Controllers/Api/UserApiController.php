@@ -31,7 +31,7 @@ class UserApiController extends Controller
                 'lastname' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:6',
-                'role' => 'required|integer|in:0,1,2', // 0 = User, 1 = Admin, 2 = Instructor
+                'role' => 'required|in:user,instructor,admin',
                 'mobile' => 'nullable|string|max:20',
             ]);
 

@@ -23,6 +23,7 @@ class User extends Authenticatable
     protected $table = 'users';
     protected $primaryKey = 'user_id';
     public $incrementing = true;
+    protected $keyType = 'int';
 
     protected $fillable = [
         'firstname',
@@ -75,19 +76,19 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if user is admin (using RBAC)
+     * Check if user is admin (using direct attribute)
      */
     public function isAdmin(): bool
     {
-        return $this->hasRole('admin');
+        return $this->role === UserRole::ADMIN;
     }
 
     /**
-     * Check if user is instructor (using RBAC)
+     * Check if user is instructor (using direct attribute)
      */
     public function isInstructor(): bool
     {
-        return $this->hasRole('instructor');
+        return $this->role === UserRole::INSTRUCTOR;
     }
 
     /**

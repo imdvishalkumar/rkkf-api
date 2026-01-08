@@ -65,11 +65,8 @@ class UserRepository implements UserRepositoryInterface
             }
         }
 
-        // Use DB facade to insert directly, bypassing enum casting during insert
-        // Then retrieve the model to get enum-cast attributes
-        $userId = \Illuminate\Support\Facades\DB::table('users')->insertGetId($data);
-
-        return $this->find($userId);
+        // Use Eloquent create to trigger timestamps and model events
+        return $this->model->create($data);
     }
 
     public function update(int $id, array $data): bool

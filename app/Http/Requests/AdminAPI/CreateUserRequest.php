@@ -18,11 +18,12 @@ class CreateUserRequest extends FormRequest
             'lastname' => 'required|string|max:50',
             'email' => 'required|email|unique:users,email|max:100',
             'password' => 'required|string|min:6',
-            'role' => 'required|integer|in:0,1,2', // 0 = User, 1 = Admin, 2 = Instructor
+            'role' => 'required|string|in:user,admin,instructor', // user, admin, instructor
             'mobile' => 'nullable|string|max:15',
         ];
     }
 }
+
 
 
 

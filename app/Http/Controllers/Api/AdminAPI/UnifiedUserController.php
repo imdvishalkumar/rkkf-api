@@ -37,6 +37,10 @@ class UnifiedUserController extends Controller
      */
     public function store(CreateUnifiedUserRequest $request)
     {
+        \Illuminate\Support\Facades\Log::info('UnifiedUserController@store reached', [
+            'user_id' => $request->user()?->user_id,
+            'role' => $request->user()?->role?->value,
+        ]);
         DB::beginTransaction();
         try {
             $authenticatedUser = $request->user();
@@ -55,20 +59,25 @@ class UnifiedUserController extends Controller
                 $role = UserRole::tryFrom($roleInput) ?? UserRole::USER;
             }
 
-            // 1. Create User via Repository (to bypass service-level checks already handled by Request)
+            // 1. Create User via Repository
             $userData = [
                 'firstname' => $data['firstname'],
                 'lastname' => $data['lastname'],
                 'email' => $data['email'],
                 'mobile' => $data['mobile'],
                 'password' => $data['password'],
-                'role' => $role->value,
+                'role' => $role->value, // Keeps enum value ('user' or 'instructor')
             ];
 
             $user = $this->userRepository->create($userData);
-            $user->assignRole($role->value);
 
-            // 2. Create Student via Repository
+            // 2. Map Enum Role to Spatie Role Name
+            // UserRole::USER ('user') -> Spatie role 'student'
+            // UserRole::INSTRUCTOR ('instructor') -> Spatie role 'instructor'
+            $spatieRole = ($role === UserRole::USER) ? 'student' : $role->value;
+            $user->assignRole($spatieRole);
+
+            // 3. Create Student via Repository
             // Data mapping for legacy NOT NULL fields without defaults
             $studentData = [
                 'firstname' => $data['firstname'],
@@ -88,11 +97,6 @@ class UnifiedUserController extends Controller
             ];
 
             $student = $this->studentRepository->create($studentData);
-
-            // Assign student role if applicable
-            if ($role === UserRole::USER) {
-                $user->assignRole('student');
-            }
 
             DB::commit();
 

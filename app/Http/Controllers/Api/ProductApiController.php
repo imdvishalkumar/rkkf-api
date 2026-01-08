@@ -391,7 +391,7 @@ class ProductApiController extends Controller
      */
     protected function formatProducts($products)
     {
-        $baseUrl = config('app.url') . '/images/products/';
+        $baseUrl = url('images/products') . '/';
         $placeholder = $baseUrl . 'placeholder.png';
 
         return $products->map(function ($product) use ($baseUrl, $placeholder) {
@@ -409,7 +409,7 @@ class ProductApiController extends Controller
      */
     protected function formatProductWithVariations($product)
     {
-        $baseUrl = config('app.url') . '/images/products/';
+        $baseUrl = url('images/products') . '/';
         $placeholder = $baseUrl . 'placeholder.png';
 
         $product->image1 = $product->image1 ? $baseUrl . $product->image1 : $placeholder;

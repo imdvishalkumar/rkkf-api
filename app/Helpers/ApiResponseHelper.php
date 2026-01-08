@@ -114,7 +114,7 @@ class ApiResponseHelper
     public static function getStatusCode(\Exception $e, int $default = 500): int
     {
         $code = $e->getCode();
-        return (is_numeric($code) && $code > 0 && $code < 600) ? (int)$code : $default;
+        return (is_numeric($code) && $code > 0 && $code < 600) ? (int) $code : $default;
     }
 
     /**
@@ -124,12 +124,12 @@ class ApiResponseHelper
     public static function getRoleValue($role): string
     {
         if ($role instanceof \BackedEnum) {
-            return (string)$role->value;
+            return (string) $role->value;
         }
         if ($role instanceof \App\Enums\UserRole) {
             return $role->value;
         }
-        return (string)$role;
+        return (string) $role;
     }
 }
 

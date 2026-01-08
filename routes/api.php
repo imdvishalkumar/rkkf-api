@@ -27,7 +27,6 @@ use App\Http\Controllers\Api\FrontendAPI\InstructorController as FrontendInstruc
 
 Route::post('/login', [AuthApiController::class, 'login']);
 Route::post('/admin/login', [SuperAdminController::class, 'login']);
-Route::post('/users', [UserApiController::class, 'store']);
 
 /*
 |--------------------------------------------------------------------------
@@ -39,15 +38,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/logout', [AuthApiController::class, 'logout']);
 
-    // Admin Specific APIs
-    Route::middleware('role:admin')->group(function () {
-        Route::prefix('admin')->group(function () {
-            Route::post('unified-users', [UnifiedUserController::class, 'store']);
-            Route::put('unified-users/student/{id}', [UnifiedUserController::class, 'updateStudentProfile']);
+    Route::get('/me', function (\Illuminate\Http\Request $request) {
+        return $request->user();
+    });
 
-            Route::apiResource('users', UserManagementController::class)->except(['store']);
-            Route::apiResource('instructors', InstructorManagementController::class)->except(['store']);
-        });
+    // Admin Specific APIs
+    Route::middleware('role:admin')->prefix('admin')->group(function () {
+        // Unified User Management (Creates User + Student Profile)
+        Route::post('unified-users', [UnifiedUserController::class, 'store']);
+        Route::put('unified-users/student/{id}', [UnifiedUserController::class, 'updateStudentProfile']);
+
+        // Standard User & Instructor Management
+        Route::apiResource('users', UserManagementController::class)->parameters(['users' => 'id']);
+        Route::apiResource('instructors', InstructorManagementController::class)->parameters(['instructors' => 'id']);
     });
 
     // Instructor Specific APIs

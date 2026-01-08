@@ -9,6 +9,9 @@ use Illuminate\Support\Facades\Hash;
 use App\Models\User;
 use App\Helpers\ApiResponseHelper;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Log;
+use Spatie\Permission\Models\Role;
+use App\Enums\UserRole;
 
 class AuthApiController extends Controller
 {
@@ -62,21 +65,35 @@ class AuthApiController extends Controller
             // Revoke all existing tokens (optional - for single device login)
             // $user->tokens()->delete();
 
-            // Ensure role is assigned in Spatie (self-healing)
-            $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string) $user->role;
-            $spatieRole = match ($roleString) {
-                'admin', '1' => 'admin',
-                'instructor', '2' => 'instructor',
-                'user', '0' => 'student',
-                default => null
-            };
+            // 1. Identify and Validate Role
+            $role = $user->role; // Already cast to UserRole enum
 
-            if ($spatieRole && !$user->hasRole($spatieRole)) {
-                $user->assignRole($spatieRole);
+            if (!in_array($role, [UserRole::USER, UserRole::INSTRUCTOR])) {
+                Log::warning('RBAC login violation', [
+                    'email' => $request->email,
+                    'endpoint' => $request->path(),
+                    'attempted_role' => $role->value,
+                ]);
+                return ApiResponseHelper::forbidden('Admin accounts must login via /admin/login');
             }
 
-            // Create new token
-            $token = $user->createToken('auth-token')->plainTextToken;
+            // 2. Safety Fallback: Check if Spatie role exists
+            if (!Role::where('name', $role->spatieRole())->exists()) {
+                Log::critical('RBAC role misconfiguration', [
+                    'role_name' => $role->spatieRole(),
+                    'user_id' => $user->user_id
+                ]);
+                return response()->json([
+                    'status' => false,
+                    'message' => 'Role misconfiguration. Contact system administrator.'
+                ], 500);
+            }
+
+            // 3. Sync Spatie Role
+            $user->syncRoles([$role->spatieRole()]);
+
+            // 4. Create new token with role scope
+            $token = $user->createToken('auth-token', [$role->spatieRole()])->plainTextToken;
 
             // Get role string value (user->role is now a UserRole enum, ->value gives the string)
             $roleString = $user->role instanceof \App\Enums\UserRole ? $user->role->value : (string) $user->role;
