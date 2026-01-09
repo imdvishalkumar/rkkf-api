@@ -23,6 +23,8 @@ class EventCommentService
         // Ensure event exists
         Event::findOrFail($eventId);
 
+        $replyToUserId = null;
+
         // If reply, ensure parent exists in same event
         if ($parentId) {
             $parent = $this->eventCommentRepository->findById($parentId);
@@ -35,13 +37,22 @@ class EventCommentService
                 throw new \Exception("Parent comment does not belong to this event.");
             }
 
-            // Flattening Logic: If parent has a parent, use THAT as the parent_id
-            // This ensures only 1 level of nesting (Comment -> Replies)
-            // Example: A (root) -> B (reply). If user replies to B, new comment C should have parent_id = A.
-            // In the DB, B has parent_id = A. So we take B's parent_id.
+            // Strict 2-level hierarchy: Always resolve root parent
+            // If parent has a parent_id, it is a reply. 
+            // - The NEW parent_id should be the root (parent->parent_id).
+            // - The reply_to_user_id should be the author of the comment we are replying to ($parent->user_id).
 
             if ($parent->parent_id) {
                 $parentId = $parent->parent_id;
+                $replyToUserId = $parent->user_id;
+            } else {
+                // We are replying to a root comment directly.
+                // Usually we don't need reply_to_user_id if replying to root, 
+                // OR we could set it to the root author. 
+                // Let's set it to root author only if explicit requirement, otherwise null mimics standard behavior (Facebook etc).
+                // Actually, user said: "track which user replied to which comment".
+                // Let's set it to the target user regardless to be safe/explicit.
+                $replyToUserId = $parent->user_id;
             }
         }
 
@@ -50,6 +61,7 @@ class EventCommentService
             'user_id' => $userId,
             'comment' => $comment,
             'parent_id' => $parentId,
+            'reply_to_user_id' => $replyToUserId,
             'is_active' => true,
         ];
 

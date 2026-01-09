@@ -20,7 +20,14 @@ class EventCommentRepository implements EventCommentRepositoryInterface
 
     public function getEventComments(int $eventId)
     {
-        return EventComment::with(['user', 'replies.user', 'replies.likes', 'likes']) // Eager load for performance
+        return EventComment::with([
+            'user',
+            'likes',
+            'replies.user',
+            'replies.likes',
+            'replies.replyToUser', // For explicit tracking
+            'replies.parent.user'  // For fallback tracking (legacy)
+        ])
             ->where('event_id', $eventId)
             ->parentComments() // Only parents
             ->active()

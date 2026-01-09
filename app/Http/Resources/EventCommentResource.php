@@ -23,10 +23,21 @@ class EventCommentResource extends JsonResource
             'total_likes' => $this->total_likes,
             'is_liked' => $this->is_liked, // Uses attribute/appends
             'user' => [
-                'id' => $this->user->user_id, // Ensure correct ID key
+                'id' => (string) $this->user->user_id, // Unifying ID as string
                 'name' => $this->user->name,
-                // Add avatar if available
+                'avatar' => $this->user->profile_image ? url('storage/' . $this->user->profile_image) : null,
             ],
+            'reply_to_user' => $this->replyToUser
+                ? [
+                    'id' => (string) $this->replyToUser->user_id,
+                    'name' => $this->replyToUser->name,
+                    'avatar' => $this->replyToUser->profile_image ? url('storage/' . $this->replyToUser->profile_image) : null,
+                ]
+                : ($this->parent ? [ // Fallback for legacy replies (assume reply to root author)
+                    'id' => (string) $this->parent->user->user_id,
+                    'name' => $this->parent->user->name,
+                    'avatar' => $this->parent->user->profile_image ? url('storage/' . $this->parent->user->profile_image) : null,
+                ] : null),
             'replies_count' => $this->replies_count,
             'replies' => EventCommentResource::collection($this->whenLoaded('replies')),
         ];

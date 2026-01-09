@@ -17,6 +17,7 @@ class EventComment extends Model
         'event_id',
         'user_id',
         'parent_id',
+        'reply_to_user_id',
         'comment',
         'is_active',
     ];
@@ -43,6 +44,14 @@ class EventComment extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
+    }
+
+    /**
+     * Get the user being replied to.
+     */
+    public function replyToUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reply_to_user_id', 'user_id');
     }
 
     /**
