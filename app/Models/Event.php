@@ -32,6 +32,14 @@ class Event extends Model
             ->where('is_liked', true);
     }
 
+    /**
+     * Get the comments for the event.
+     */
+    public function eventComments(): HasMany
+    {
+        return $this->hasMany(EventComment::class, 'event_id', 'event_id')->where('is_active', true);
+    }
+
     protected $primaryKey = 'event_id';
     public $timestamps = false; // Legacy table might not have created_at/updated_at
 

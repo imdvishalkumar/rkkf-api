@@ -12,10 +12,12 @@ use App\Http\Controllers\Api\EventLikeController;
 use App\Http\Controllers\Api\ExamApiController;
 use App\Http\Controllers\Api\ProductApiController;
 use App\Http\Controllers\Api\CartApiController;
+use App\Http\Controllers\Api\EventCommentController;
 use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\AdminAPI\SuperAdminController;
 use App\Http\Controllers\Api\AdminAPI\UserManagementController;
 use App\Http\Controllers\Api\AdminAPI\InstructorManagementController;
+
 use App\Http\Controllers\Api\AdminAPI\UnifiedUserController;
 use App\Http\Controllers\Api\FrontendAPI\UserController as FrontendUserController;
 use App\Http\Controllers\Api\FrontendAPI\InstructorController as FrontendInstructorController;
@@ -43,7 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', function (\Illuminate\Http\Request $request) {
         $user = $request->user();
         $token = $user?->currentAccessToken();
-        
+
         return response()->json([
             'user' => $user,
             'user_id' => $user?->user_id,
@@ -69,7 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
                 'token_present' => $request->bearerToken() !== null,
             ]);
         });
-        
+
         // Unified User Management (Creates User + Student Profile)
         Route::post('unified-users', [UnifiedUserController::class, 'store']);
         Route::put('unified-users/student/{id}', [UnifiedUserController::class, 'updateStudentProfile']);
@@ -110,11 +112,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{id}', [EventApiController::class, 'show']);
         Route::put('{id}', [EventApiController::class, 'update']);
         Route::delete('{id}', [EventApiController::class, 'destroy']);
-        
+
         // Event like endpoints (require authentication)
         Route::get('{event_id}/like', [EventLikeController::class, 'getLikeStatus']);
         Route::post('{event_id}/like', [EventLikeController::class, 'toggleLike']);
+
+        // Event comment endpoints (require authentication)
+        Route::post('/{event_id}/comments', [EventCommentController::class, 'store']);
+        Route::get('/{event_id}/comments', [EventCommentController::class, 'index']);
     });
+
+    // Comment Likes (moved outside events to avoid conflict with event likes)
+    Route::post('comments/{comment_id}/like', [EventCommentController::class, 'toggleLike']);
 
     Route::prefix('products')->group(function () {
         Route::get('list', [ProductApiController::class, 'getProductList']);

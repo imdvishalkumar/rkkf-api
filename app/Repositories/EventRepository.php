@@ -31,7 +31,7 @@ class EventRepository
 
     public function find(int $id): ?Event
     {
-        return $this->model->find($id);
+        return $this->model->withCount('eventComments')->find($id);
     }
 
     /**
@@ -44,7 +44,7 @@ class EventRepository
      */
     public function getAll(int $perPage = 15, $category = null, $upcomingEvent = null)
     {
-        $query = $this->model->with('category')->orderBy('from_date', 'desc');
+        $query = $this->model->with('category')->withCount('eventComments')->orderBy('from_date', 'desc');
 
         if ($category) {
             if (is_array($category)) {
@@ -59,7 +59,9 @@ class EventRepository
         }
 
         if ($upcomingEvent && is_array($upcomingEvent)) {
-            $filtered = array_values(array_filter($upcomingEvent, function ($v) { return $v !== '' && $v !== null; }));
+            $filtered = array_values(array_filter($upcomingEvent, function ($v) {
+                return $v !== '' && $v !== null;
+            }));
             if (!empty($filtered) && !in_array('All', $filtered, true)) {
                 // assume upcoming_event contains event types; filter by 'type' column
                 $query->whereIn('type', $filtered);

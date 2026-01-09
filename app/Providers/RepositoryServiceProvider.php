@@ -25,6 +25,8 @@ use App\Repositories\Contracts\CouponRepositoryInterface;
 use App\Repositories\CouponRepository;
 use App\Repositories\Contracts\BeltRepositoryInterface;
 use App\Repositories\BeltRepository;
+use App\Interfaces\EventCommentRepositoryInterface;
+use App\Repositories\EventCommentRepository;
 
 class RepositoryServiceProvider extends ServiceProvider
 {
@@ -38,36 +40,39 @@ class RepositoryServiceProvider extends ServiceProvider
     {
         // Student Repository
         $this->app->bind(StudentRepositoryInterface::class, StudentRepository::class);
-        
+
         // Fee Repository
         $this->app->bind(FeeRepositoryInterface::class, FeeRepository::class);
-        
+
         // User Repository
         $this->app->bind(UserRepositoryInterface::class, UserRepository::class);
-        
+
         // Branch Repository
         $this->app->bind(BranchRepositoryInterface::class, BranchRepository::class);
-        
+
         // Attendance Repository
         $this->app->bind(AttendanceRepositoryInterface::class, AttendanceRepository::class);
-        
+
         // Product Repository
         $this->app->bind(ProductRepositoryInterface::class, ProductRepository::class);
-        
+
         // Order Repository
         $this->app->bind(OrderRepositoryInterface::class, OrderRepository::class);
-        
+
         // Exam Repository
         $this->app->bind(ExamRepositoryInterface::class, ExamRepository::class);
-        
+
         // Event Repository
         $this->app->bind(EventRepositoryInterface::class, EventRepository::class);
-        
+
         // Coupon Repository
         $this->app->bind(CouponRepositoryInterface::class, CouponRepository::class);
-        
+
         // Belt Repository
         $this->app->bind(BeltRepositoryInterface::class, BeltRepository::class);
+
+        // Event Comment Repository
+        $this->app->bind(EventCommentRepositoryInterface::class, EventCommentRepository::class);
     }
 
     /**

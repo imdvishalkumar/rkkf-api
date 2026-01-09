@@ -83,7 +83,7 @@ class AuthApiController extends Controller
 
             // Spatie Role Safety Validation - Check role exists before assignment
             $spatieRoleName = $role->spatieRole();
-            
+
             if (!User::validateSpatieRoleExists($spatieRoleName)) {
                 Log::critical('Role misconfiguration detected', [
                     'email' => $request->email,
@@ -111,7 +111,7 @@ class AuthApiController extends Controller
             // Get profile image from students table if email matches
             $profileImgUrl = null;
             $student = Student::where('email', $user->email)->first();
-            
+
             if ($student && !empty($student->profile_img) && $student->profile_img !== 'default.png') {
                 // Student has profile image - use the same path format as unified-users API
                 // File is stored in storage/app/public/profile_images/ and accessible via /storage/profile_images/
@@ -176,7 +176,7 @@ class AuthApiController extends Controller
     public function register(RegisterRequest $request)
     {
         $profileImgPath = null;
-        
+
         try {
             $data = $request->validated();
 
@@ -197,13 +197,13 @@ class AuthApiController extends Controller
 
             // Spatie Role Safety Validation - Check role exists before assignment
             $spatieRoleName = $role->spatieRole();
-            
+
             if (!User::validateSpatieRoleExists($spatieRoleName)) {
                 // If file was uploaded but role validation fails, delete it
                 if ($profileImgPath) {
                     Storage::disk('public')->delete($profileImgPath);
                 }
-                
+
                 Log::critical('Role misconfiguration detected', [
                     'email' => $data['email'],
                     'endpoint' => $request->path(),
@@ -246,7 +246,7 @@ class AuthApiController extends Controller
             // Get profile image from students table if email matches
             $profileImgUrl = null;
             $student = Student::where('email', $user->email)->first();
-            
+
             if ($student && !empty($student->profile_img)) {
                 // Student has profile image - construct full path
                 $profileImgPath = 'profile_images/' . $student->profile_img;
@@ -293,14 +293,14 @@ class AuthApiController extends Controller
             if (isset($profileImgPath) && $profileImgPath) {
                 Storage::disk('public')->delete($profileImgPath);
             }
-            
+
             return ApiResponseHelper::validationError($e->errors());
         } catch (\Exception $e) {
             // If file was uploaded but registration fails, delete it
             if (isset($profileImgPath) && $profileImgPath) {
                 Storage::disk('public')->delete($profileImgPath);
             }
-            
+
             return ApiResponseHelper::error(
                 'Registration failed',
                 500,
