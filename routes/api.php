@@ -129,11 +129,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('list', [ProductApiController::class, 'getProductList']);
         Route::post('store', [ProductApiController::class, 'store']);
         Route::get('{product_id}', [ProductApiController::class, 'show']);
-        Route::get('details/{product_id}', [ProductApiController::class, 'productDetails']);
+        Route::get('show/{product_id}', [ProductApiController::class, 'productDetails']);
         Route::put('{product_id}', [ProductApiController::class, 'update']);
         Route::delete('{product_id}', [ProductApiController::class, 'destroy']);
         Route::put('{product_id}/variations/{variation_id}', [ProductApiController::class, 'updateVariationQty']);
     });
+
+    Route::apiResource('product-categories', \App\Http\Controllers\Api\ProductCategoryController::class);
 
     Route::prefix('cart')->group(function () {
         Route::get('/', [CartApiController::class, 'index']);

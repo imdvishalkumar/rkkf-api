@@ -21,12 +21,12 @@ class EventCommentRepository implements EventCommentRepositoryInterface
     public function getEventComments(int $eventId)
     {
         return EventComment::with([
-            'user',
+            'user.student',
             'likes',
-            'replies.user',
+            'replies.user.student',
             'replies.likes',
-            'replies.replyToUser', // For explicit tracking
-            'replies.parent.user'  // For fallback tracking (legacy)
+            'replies.replyToUser.student', // For explicit tracking
+            'replies.parent.user.student'  // For fallback tracking (legacy)
         ])
             ->where('event_id', $eventId)
             ->parentComments() // Only parents

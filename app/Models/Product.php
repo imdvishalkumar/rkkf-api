@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Product extends Model
 {
@@ -18,12 +19,21 @@ class Product extends Model
         'image2',
         'image3',
         'belt_ids',
-        'active',
+        'is_active',
+        'product_category_id',
     ];
 
     protected $casts = [
-        'active' => 'boolean',
+        'is_active' => 'boolean',
     ];
+
+    /**
+     * Get the product category that owns the product.
+     */
+    public function productCategory(): BelongsTo
+    {
+        return $this->belongsTo(ProductCategory::class, 'product_category_id');
+    }
 
     /**
      * Get the variations for the product.

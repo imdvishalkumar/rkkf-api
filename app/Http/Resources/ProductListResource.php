@@ -32,18 +32,12 @@ class ProductListResource extends JsonResource
         return [
             'product_id' => $this->product_id,
             'name' => $this->name,
-            'details' => $this->details,
+            // 'details' => $this->details,
             'image1' => $makeImageUrl($this->image1),
-            'image2' => $makeImageUrl($this->image2),
-            'image3' => $makeImageUrl($this->image3),
-            'belt_ids' => $this->belt_ids,
-            'is_active' => (int) $this->active,
-            'variation' => $firstVariation ? [
-                'variation_id' => $firstVariation->id,
-                'variation' => $firstVariation->variation,
-                'price' => $firstVariation->price,
-                'qty' => $firstVariation->qty,
-            ] : null,
+            'share_product_link' => url('product/' . $this->product_id),
+            'price' => $firstVariation ? $firstVariation->price : null,
+            'rating' => $this->rating,
+            'reviews_count' => $this->reviews_count,
         ];
     }
 }

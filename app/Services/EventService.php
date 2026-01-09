@@ -22,9 +22,9 @@ class EventService
      * @param mixed $category Either null, int category id, or array of category names
      * @param mixed $upcomingEvent Either null or array of upcoming event types/labels
      */
-    public function getAllEvents(int $perPage = 15, $category = null, $upcomingEvent = null)
+    public function getAllEvents(int $perPage = 15, $category = null, $upcomingEvent = null, ?string $search = null)
     {
-        return $this->eventRepository->getAll($perPage, $category, $upcomingEvent);
+        return $this->eventRepository->getAll($perPage, $category, $upcomingEvent, $search);
     }
 
     public function getEventById(int $id)

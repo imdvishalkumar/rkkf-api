@@ -42,9 +42,13 @@ class EventRepository
      * @param mixed $category null|int|array
      * @param mixed $upcomingEvent null|array
      */
-    public function getAll(int $perPage = 15, $category = null, $upcomingEvent = null)
+    public function getAll(int $perPage = 15, $category = null, $upcomingEvent = null, ?string $search = null)
     {
         $query = $this->model->with('category')->withCount('eventComments')->orderBy('from_date', 'desc');
+
+        if ($search) {
+            $query->where('name', 'like', '%' . $search . '%');
+        }
 
         if ($category) {
             if (is_array($category)) {

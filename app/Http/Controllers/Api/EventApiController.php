@@ -65,7 +65,9 @@ class EventApiController extends Controller
                 }
             }
 
-            $events = $this->eventService->getAllEvents($perPage, $categoryNames, $upcomingEvent);
+            $search = $request->input('search');
+
+            $events = $this->eventService->getAllEvents($perPage, $categoryNames, $upcomingEvent, $search);
             $categories = DB::table('categories')
                 ->where('active', 1)
                 ->pluck('name')

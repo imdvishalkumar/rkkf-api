@@ -37,7 +37,8 @@ class EventResource extends JsonResource
             'date' => $this->from_date ? $this->from_date->format('Y-m-d') : null,
             'likes' => $likeCount, // Use actual like count from event_likes table
             'comments' => $this->event_comments_count ?? 0,
-            'shares' => $this->shares,
+            'shares' => $this->event_shares_count ?? 0,
+            'share_event_link' => 'https://api.rkkf.imobiledesigns.cloud', //. $this->event_id,
             'time_ago' => $this->time_ago, // Accessor
             'is_liked' => $isLiked, // Use actual like status from event_likes table
             'category' => $this->category ? $this->category->name : null,

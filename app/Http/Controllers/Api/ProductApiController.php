@@ -44,9 +44,12 @@ class ProductApiController extends Controller
             // Pagination parameters
             $perPage = $request->input('per_page', PaginationHelper::getDefaultPerPage());
             $page = $request->input('page', 1);
+            $productCategoryId = $request->input('product_category_id');
+            $productCategoryName = $request->input('product_category_name');
+            $search = $request->input('search');
 
             // Get paginated products (join with variations, qty > 0)
-            $paginator = $this->productService->getProductList($beltId, $perPage, $page);
+            $paginator = $this->productService->getProductList($beltId, $productCategoryId, $productCategoryName, $search, $perPage, $page);
 
             // Use resource to sanitize each item and avoid exposing model internals
             $items = array_map(function ($row) {
@@ -55,10 +58,18 @@ class ProductApiController extends Controller
 
             $paginationData = PaginationHelper::formatWithData($paginator, $items);
 
+            // Get all active product categories
+            $categories = \App\Models\ProductCategory::where('active', 1)->get();
+            $categories->transform(function ($cat) {
+                $cat->image = $cat->image ? url('images/categories/' . $cat->image) : null;
+                return $cat;
+            });
+
             $response = [
                 'status' => true,
                 'message' => 'Products retrieved successfully',
                 'data' => $paginationData,
+                'categories' => $categories,
             ];
 
             // If no belt_id filter, also include belts list (preserve legacy field)
@@ -81,6 +92,7 @@ class ProductApiController extends Controller
         try {
             $request->validate([
                 'is_active' => 'nullable|boolean',
+                'product_category_id' => 'nullable|integer|exists:product_categories,id',
                 'per_page' => 'nullable|integer|min:1|max:' . PaginationHelper::getMaxPerPage(),
                 'page' => 'nullable|integer|min:1',
             ]);
@@ -92,12 +104,17 @@ class ProductApiController extends Controller
                 $query->where('is_active', $request->boolean('is_active'));
             }
 
+            // Filter by category
+            if ($request->has('product_category_id')) {
+                $query->where('product_category_id', $request->input('product_category_id'));
+            }
+
             // Get pagination parameters
             $perPage = $request->input('per_page', PaginationHelper::getDefaultPerPage());
             $page = $request->input('page', 1);
 
             // Get with pagination
-            $products = $query->paginate($perPage, ['*'], 'page', $page);
+            $products = $query->with('productCategory')->paginate($perPage, ['*'], 'page', $page);
 
             // Format products with image URLs
             $products->getCollection()->transform(function ($product) {
@@ -148,6 +165,11 @@ class ProductApiController extends Controller
     public function store(Request $request)
     {
         try {
+            // Admin Check
+            if (!$request->user() || !$request->user()->isAdmin()) {
+                return ApiResponseHelper::forbidden('Only admins can create products.');
+            }
+
             $validated = $request->validate([
                 'name' => 'required|string|max:50',
                 'details' => 'required|string|max:300',
@@ -157,6 +179,7 @@ class ProductApiController extends Controller
                 'belt_ids' => 'required|string|max:256',
                 'is_active' => 'required',
                 'variations' => 'required',
+                'product_category_id' => 'required|integer|exists:product_categories,id',
             ]);
 
             // Normalize belt_ids (trim extra quotes if present)
@@ -216,6 +239,7 @@ class ProductApiController extends Controller
                 'image3' => $image3Name,
                 'belt_ids' => $beltIds,
                 'is_active' => $isActive,
+                'product_category_id' => $request->input('product_category_id'),
             ]);
 
             // Create variations
@@ -415,6 +439,16 @@ class ProductApiController extends Controller
         $product->image1 = $product->image1 ? $baseUrl . $product->image1 : $placeholder;
         $product->image2 = $product->image2 ? $baseUrl . $product->image2 : $placeholder;
         $product->image3 = $product->image3 ? $baseUrl . $product->image3 : $placeholder;
+
+        $product->share_product_link = url('product/' . $product->product_id);
+
+        $price = '0.00';
+        if ($product->variations && $product->variations->isNotEmpty()) {
+            $price = number_format($product->variations->first()->price, 2, '.', '');
+        }
+        $product->price = $price;
+        $product->rating = null;
+        $product->reviews_count = null;
 
         return $product;
     }

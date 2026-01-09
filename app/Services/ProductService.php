@@ -99,9 +99,9 @@ class ProductService
      * Returns products with variations where qty > 0
      * Filters by belt_id if provided (checks if belt_id is in comma-separated belt_ids string)
      */
-    public function getProductList(?int $beltId = null, int $perPage = 10, int $page = 1)
+    public function getProductList(?int $beltId = null, ?int $productCategoryId = null, ?string $productCategoryName = null, ?string $search = null, int $perPage = 10, int $page = 1)
     {
-        return $this->productRepository->getProductList($beltId, $perPage, $page);
+        return $this->productRepository->getProductList($beltId, $productCategoryId, $productCategoryName, $search, $perPage, $page);
     }
 }
 

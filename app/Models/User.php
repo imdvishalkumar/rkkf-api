@@ -62,6 +62,14 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the student record associated with the user via email.
+     */
+    public function student()
+    {
+        return $this->hasOne(Student::class, 'email', 'email');
+    }
+
+    /**
      * Get the user's full name.
      */
     public function getNameAttribute(): string
@@ -127,7 +135,7 @@ class User extends Authenticatable
     {
         try {
             $role = \Spatie\Permission\Models\Role::where('name', $roleName)->first();
-            
+
             if (!$role) {
                 Log::critical('Role misconfiguration detected: Spatie role missing', [
                     'role_name' => $roleName,
@@ -135,7 +143,7 @@ class User extends Authenticatable
                 ]);
                 return false;
             }
-            
+
             return true;
         } catch (\Exception $e) {
             Log::critical('Role misconfiguration detected: Exception during role validation', [
@@ -162,7 +170,7 @@ class User extends Authenticatable
         }
 
         $spatieRoleName = $this->role->spatieRole();
-        
+
         // Validate role exists - never auto-create
         if (!self::validateSpatieRoleExists($spatieRoleName)) {
             abort(500, 'System role misconfigured');
