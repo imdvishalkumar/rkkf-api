@@ -33,7 +33,7 @@ class AttendanceService
     public function getAttendanceById(int $id)
     {
         $attendance = $this->attendanceRepository->find($id);
-        
+
         if (!$attendance) {
             throw new Exception('Attendance not found', 404);
         }
@@ -44,7 +44,7 @@ class AttendanceService
     public function getAttendanceByStudent(int $studentId, array $filters = [])
     {
         $student = $this->studentRepository->find($studentId);
-        
+
         if (!$student) {
             throw new Exception('Student not found', 404);
         }
@@ -55,7 +55,7 @@ class AttendanceService
     public function getAttendanceByBranch(int $branchId, array $filters = [])
     {
         $branch = $this->branchRepository->find($branchId);
-        
+
         if (!$branch) {
             throw new Exception('Branch not found', 404);
         }
@@ -71,7 +71,7 @@ class AttendanceService
     public function markAttendance(array $attendanceData): array
     {
         DB::beginTransaction();
-        
+
         try {
             $this->attendanceRepository->markAttendance($attendanceData);
 
@@ -91,16 +91,16 @@ class AttendanceService
     public function createAttendance(array $data): array
     {
         DB::beginTransaction();
-        
+
         try {
             $student = $this->studentRepository->find($data['student_id']);
-            
+
             if (!$student) {
                 throw new Exception('Student not found', 404);
             }
 
             $branch = $this->branchRepository->find($data['branch_id']);
-            
+
             if (!$branch) {
                 throw new Exception('Branch not found', 404);
             }
@@ -124,7 +124,7 @@ class AttendanceService
     public function updateAttendance(int $id, array $data): array
     {
         $attendance = $this->attendanceRepository->find($id);
-        
+
         if (!$attendance) {
             throw new Exception('Attendance not found', 404);
         }
@@ -144,12 +144,53 @@ class AttendanceService
     public function deleteAttendance(int $id): bool
     {
         $attendance = $this->attendanceRepository->find($id);
-        
+
         if (!$attendance) {
             throw new Exception('Attendance not found', 404);
         }
 
         return $this->attendanceRepository->delete($id);
+    }
+
+    /**
+     * Get student attendance overview with counts and percentage
+     */
+    public function getStudentAttendanceOverview(int $studentId, string $startDate, string $endDate): array
+    {
+        // Get all attendance records for the student within date range
+        $attendanceRecords = DB::table('attendance')
+            ->where('student_id', $studentId)
+            ->whereBetween('date', [$startDate, $endDate])
+            ->get();
+
+        $present = 0;
+        $absent = 0;
+        $leave = 0;
+        $totalDays = $attendanceRecords->count();
+
+        foreach ($attendanceRecords as $record) {
+            if ($record->attend == 'P') {
+                $present++;
+            } elseif ($record->attend == 'A') {
+                $absent++;
+            } elseif ($record->attend == 'L') {
+                $leave++;
+            }
+        }
+
+        // Calculate percentage (based on total records found, matching legacy logic)
+        $percentage = $totalDays > 0 ? round(($present / $totalDays) * 100, 2) : 0;
+
+        return [
+            'overview' => [
+                'present' => $present,
+                'absent' => $absent,
+                'leave' => $leave,
+                'total_days' => $totalDays,
+                'percentage' => $percentage
+            ],
+            'records' => $attendanceRecords // Optional if needed for detailed view later
+        ];
     }
 }
 

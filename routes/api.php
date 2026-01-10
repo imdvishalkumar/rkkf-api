@@ -105,6 +105,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('set-status', [StudentApiController::class, 'setStatus']);
         Route::put('profile', [StudentApiController::class, 'updateProfile']);
         Route::get('profile', [StudentApiController::class, 'getProfile']);
+        Route::get('attendance', [StudentApiController::class, 'getAttendanceOverview']);
     });
 
     Route::prefix('events')->group(function () {

@@ -10,12 +10,15 @@ class Attendance extends Model
     protected $table = 'attendance';
     protected $primaryKey = 'attendance_id';
     public $incrementing = true;
+    public $timestamps = false;
 
     protected $fillable = [
         'student_id',
         'branch_id',
         'date',
         'attend',
+        'user_id',
+        'is_additional',
     ];
 
     protected $casts = [

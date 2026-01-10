@@ -72,8 +72,23 @@ class Student extends Model
     /**
      * Get the student's full name.
      */
+    /**
+     * Get the student's full name.
+     */
     public function getNameAttribute(): string
     {
         return $this->firstname . ' ' . $this->lastname;
     }
+
+    /**
+     * Get the student's GR Number (Dynamic).
+     * Format: STU-{Year}-{ID}
+     */
+    public function getGrNoAttribute(): string
+    {
+        $year = $this->doj ? $this->doj->format('Y') : date('Y'); // Fallback to current year if DOJ missing (though it shouldn't be)
+        return "STU-{$year}-{$this->student_id}";
+    }
+
+    protected $appends = ['name', 'gr_no'];
 }

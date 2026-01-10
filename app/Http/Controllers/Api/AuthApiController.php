@@ -147,6 +147,7 @@ class AuthApiController extends Controller
                     'email' => $user->email,
                     'mobile' => $user->mobile,
                     'role' => $roleString,
+                    'gr_no' => $student ? $student->gr_no : null,
                     'profile_img' => $profileImgUrl,
                 ],
                 'token' => $token,
@@ -282,7 +283,8 @@ class AuthApiController extends Controller
                     'email' => $user->email,
                     'mobile' => $user->mobile,
                     'role' => $roleString,
-                    'profile_img' => $profileImgUrl, // Always default since users table doesn't store profile_img
+                    'gr_no' => $student ? $student->gr_no : null,
+                    'profile_img' => $profileImgUrl,
                 ],
                 'token' => $token,
                 'token_type' => 'Bearer',

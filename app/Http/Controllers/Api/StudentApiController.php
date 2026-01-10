@@ -14,10 +14,13 @@ use Exception;
 class StudentApiController extends Controller
 {
     protected $studentService;
+    protected $attendanceService;
 
-    public function __construct(StudentService $studentService)
+    // Inject AttendanceService alongside StudentService
+    public function __construct(StudentService $studentService, \App\Services\AttendanceService $attendanceService)
     {
         $this->studentService = $studentService;
+        $this->attendanceService = $attendanceService;
     }
 
     /**
@@ -324,6 +327,53 @@ class StudentApiController extends Controller
             }
 
             return ApiResponseHelper::success($student, 'Profile updated successfully');
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Get student attendance overview
+     * GET /api/students/attendance
+     */
+    public function getAttendanceOverview(Request $request)
+    {
+        try {
+            $request->validate([
+                'from_date' => 'nullable|date',
+                'to_date' => 'nullable|date|after_or_equal:from_date',
+            ]);
+
+            // Securely get student from authenticated user
+            $student = $request->user()->student;
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not associated with this user', 404);
+            }
+
+            // Determine date range (default to current month if not provided)
+            $startDate = $request->input('from_date') ?? date('Y-m-01');
+            $endDate = $request->input('to_date') ?? date('Y-m-t');
+
+            // Call service
+            $data = $this->attendanceService->getStudentAttendanceOverview($student->student_id, $startDate, $endDate);
+
+            // Prepare response structure matching Figma
+            $response = [
+                'student_info' => [
+                    'name' => $student->firstname . ' ' . $student->lastname,
+                    'gr_no' => $student->gr_no,
+                    'student_id' => $student->student_id,
+                ],
+                'date_range' => [
+                    'from' => $startDate,
+                    'to' => $endDate
+                ],
+                'overview' => $data['overview']
+            ];
+
+            return ApiResponseHelper::success($response, 'Attendance overview retrieved successfully');
+
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
