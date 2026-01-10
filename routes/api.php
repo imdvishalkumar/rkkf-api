@@ -103,6 +103,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('search', [StudentApiController::class, 'searchStudents']);
         Route::get('deactive-report', [StudentApiController::class, 'getDeactiveReport']);
         Route::post('set-status', [StudentApiController::class, 'setStatus']);
+        Route::put('profile', [StudentApiController::class, 'updateProfile']);
+        Route::get('profile', [StudentApiController::class, 'getProfile']);
     });
 
     Route::prefix('events')->group(function () {

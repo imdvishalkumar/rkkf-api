@@ -7,6 +7,8 @@ use App\Services\StudentService;
 use App\Helpers\ApiResponseHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use App\Http\Requests\Student\UpdateStudentProfileRequest;
 use Exception;
 
 class StudentApiController extends Controller
@@ -238,6 +240,90 @@ class StudentApiController extends Controller
             }
 
             return ApiResponseHelper::success(null, $message);
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Get student profile
+     * GET /api/students/profile
+     */
+    public function getProfile(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            // Get student associated with user
+            $student = \App\Models\Student::where('email', $user->email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not found', 404);
+            }
+
+            // Add full URL for profile image
+            if ($student->profile_img && $student->profile_img !== 'default.png') {
+                $student->profile_img_url = Storage::disk('public')->url('profile_images/' . $student->profile_img);
+            } else {
+                $student->profile_img_url = asset('images/default-avatar.png');
+            }
+
+            return ApiResponseHelper::success($student, 'Profile retrieved successfully');
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Update student profile
+     * PUT /api/students/profile
+     */
+    public function updateProfile(UpdateStudentProfileRequest $request)
+    {
+        try {
+            $user = $request->user();
+
+            // Get student associated with user
+            // Assuming user has 'email' which links to 'student'
+            $student = \App\Models\Student::where('email', $user->email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not found', 404);
+            }
+
+            $data = $request->validated();
+
+            // Handle profile image upload
+            if ($request->hasFile('profile_img')) {
+                // Delete old image if it exists and is not default
+                if ($student->profile_img && $student->profile_img !== 'default.png') {
+                    $oldPath = 'profile_images/' . $student->profile_img;
+                    if (Storage::disk('public')->exists($oldPath)) {
+                        Storage::disk('public')->delete($oldPath);
+                    }
+                }
+
+                $file = $request->file('profile_img');
+                $fileName = time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $file->storeAs('profile_images', $fileName, 'public');
+                $data['profile_img'] = $fileName;
+            }
+
+            // Update using service
+            $this->studentService->updateStudent($student->student_id, $data);
+
+            // Get updated student with fresh data
+            $student->refresh();
+
+            // Add full URL for profile image
+            if ($student->profile_img && $student->profile_img !== 'default.png') {
+                $student->profile_img_url = Storage::disk('public')->url('profile_images/' . $student->profile_img);
+            } else {
+                // Fallback to default if needed
+                $student->profile_img_url = asset('images/default-avatar.png');
+            }
+
+            return ApiResponseHelper::success($student, 'Profile updated successfully');
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
