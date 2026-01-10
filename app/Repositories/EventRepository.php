@@ -3,9 +3,10 @@
 namespace App\Repositories;
 
 use App\Models\Event;
+use App\Repositories\Contracts\EventRepositoryInterface;
 use Illuminate\Database\Eloquent\Collection;
 
-class EventRepository
+class EventRepository implements EventRepositoryInterface
 {
     protected $model;
 
@@ -14,24 +15,47 @@ class EventRepository
         $this->model = $model;
     }
 
+    public function all(array $filters = []): Collection
+    {
+        return $this->model->all();
+    }
+
     public function create(array $data): Event
     {
         return $this->model->create($data);
     }
 
-    public function update(Event $event, array $data): bool
+    public function update(int $id, array $data): bool
     {
+        $event = $this->model->find($id);
+        if (!$event) {
+            return false;
+        }
         return $event->update($data);
     }
 
-    public function delete(Event $event): bool
+    public function delete(int $id): bool
     {
+        $event = $this->model->find($id);
+        if (!$event) {
+            return false;
+        }
         return $event->delete();
     }
 
     public function find(int $id): ?Event
     {
         return $this->model->withCount('eventComments')->find($id);
+    }
+
+    public function getPublished(array $filters = []): Collection
+    {
+        return $this->model->where('status', 'published')->get();
+    }
+
+    public function getByDateRange(string $startDate, string $endDate): Collection
+    {
+        return $this->model->whereBetween('from_date', [$startDate, $endDate])->get();
     }
 
     /**
@@ -80,3 +104,4 @@ class EventRepository
         return $this->model->upcoming()->get();
     }
 }
+

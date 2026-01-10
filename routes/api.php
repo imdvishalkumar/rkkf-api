@@ -153,4 +153,32 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('instructor/{id}', [FrontendInstructorController::class, 'delete']);
     });
 
+    // Fee Payment APIs
+    Route::prefix('fees')->group(function () {
+        // Get due fees for authenticated student
+        Route::get('due', [FeeApiController::class, 'getDueFees']);
+        // Fees summary (for Fees Summary screen)
+        Route::get('summary', [FeeApiController::class, 'getSummary']);
+        // Payment history (for Payment History screen)
+        Route::get('history', [FeeApiController::class, 'getHistory']);
+        // Payment flow
+        Route::post('payment/initiate', [FeeApiController::class, 'initiatePayment']);
+        Route::post('payment/verify', [FeeApiController::class, 'verifyPayment']);
+    });
+
+    // Leave Management APIs
+    Route::prefix('leaves')->group(function () {
+        Route::post('apply', [\App\Http\Controllers\Api\LeaveApiController::class, 'apply']);
+        Route::get('history', [\App\Http\Controllers\Api\LeaveApiController::class, 'history']);
+    });
+
 });
+
+/*
+|--------------------------------------------------------------------------
+| Public Webhook Routes (No Auth Required)
+|--------------------------------------------------------------------------
+*/
+
+// Razorpay webhook for payment notifications
+Route::post('/razorpay/webhook', [FeeApiController::class, 'handleWebhook']);

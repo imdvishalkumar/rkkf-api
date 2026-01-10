@@ -5,23 +5,29 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Services\FeeService;
 use App\Services\StudentService;
+use App\Services\PaymentService;
 use App\Helpers\ApiResponseHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Exception;
 
 class FeeApiController extends Controller
 {
     protected $feeService;
     protected $studentService;
+    protected $paymentService;
 
     public function __construct(
         FeeService $feeService,
-        StudentService $studentService
+        StudentService $studentService,
+        PaymentService $paymentService
     ) {
         $this->feeService = $feeService;
         $this->studentService = $studentService;
+        $this->paymentService = $paymentService;
     }
+
 
     /**
      * Get student info by GR number
@@ -103,8 +109,8 @@ class FeeApiController extends Controller
                 's.student_id as grno',
                 'br.name as branch_name'
             )
-            ->orderBy('f.date', 'desc')
-            ->get();
+                ->orderBy('f.date', 'desc')
+                ->get();
 
             return ApiResponseHelper::success($fees, 'Fees retrieved successfully');
         } catch (Exception $e) {
@@ -192,7 +198,7 @@ class FeeApiController extends Controller
                     ->orderBy('year', 'desc')
                     ->orderBy('months', 'desc')
                     ->first();
-                
+
                 $student->last_fee = $lastFee;
             }
 
@@ -466,6 +472,249 @@ class FeeApiController extends Controller
             ];
 
             return ApiResponseHelper::success($report, 'Full report retrieved successfully');
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Get due fees for authenticated student
+     * GET /api/fees/due
+     * 
+     * Returns calculated due fees based on branch, belt, and fastrack status
+     */
+    public function getDueFees(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('User not authenticated', 401);
+            }
+
+            // Get student through relationship (User->Student via email)
+            $student = $user->student;
+
+            if (!$student) {
+                return ApiResponseHelper::error('No student profile linked to this user', 404);
+            }
+
+            $studentId = $student->student_id;
+            $result = $this->feeService->calculateDueFees($studentId);
+
+            if (!$result['success']) {
+                return ApiResponseHelper::error($result['message'], 404);
+            }
+
+            return ApiResponseHelper::success([
+                'last_paid' => $result['data'],
+                'due' => $result['due'],
+            ], 'Due fees calculated successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Initiate fee payment via Razorpay
+     * POST /api/fees/payment/initiate
+     * 
+     * Request body:
+     * - months: string (comma-separated month numbers, e.g., "1,2,3")
+     * - year: int (year for the fee)
+     * - amount: decimal (total amount to pay)
+     * - coupon_id: int (optional, coupon ID if applicable)
+     * 
+     * Returns Razorpay order ID and key for client-side checkout
+     */
+    public function initiatePayment(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('User not authenticated', 401);
+            }
+
+            // Get student through relationship (User->Student via email)
+            $student = $user->student;
+
+            if (!$student) {
+                return ApiResponseHelper::error('No student profile linked to this user', 404);
+            }
+
+            $request->validate([
+                'months' => 'required|string',
+                'year' => 'required|integer|min:2020|max:2100',
+                'amount' => 'required|numeric|min:1',
+                'coupon_id' => [
+                    'nullable',
+                    'integer',
+                    function ($attribute, $value, $fail) {
+                        if ($value != 0 && !\DB::table('coupon')->where('coupon_id', $value)->exists()) {
+                            $fail('The selected coupon is invalid.');
+                        }
+                    },
+                ],
+            ]);
+
+            $data = [
+                'student_id' => $student->student_id,
+                'months' => $request->input('months'),
+                'year' => $request->input('year'),
+                'amount' => $request->input('amount'),
+                'coupon_id' => $request->input('coupon_id', 0),
+                'type' => 'fees',
+            ];
+
+            $result = $this->paymentService->createRazorpayOrder($data);
+
+            return ApiResponseHelper::success($result, 'Payment order created successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Verify fee payment after Razorpay checkout
+     * POST /api/fees/payment/verify
+     * 
+     * Request body:
+     * - razorpay_order_id: string (Razorpay order ID)
+     * - razorpay_payment_id: string (Razorpay payment ID)
+     * - razorpay_signature: string (Razorpay signature for verification)
+     * 
+     * On success, fee records are created and transaction is marked as completed
+     */
+    public function verifyPayment(Request $request)
+    {
+        try {
+            $request->validate([
+                'razorpay_order_id' => 'required|string',
+                'razorpay_payment_id' => 'required|string',
+                'razorpay_signature' => 'required|string',
+            ]);
+
+            $data = $request->only([
+                'razorpay_order_id',
+                'razorpay_payment_id',
+                'razorpay_signature',
+            ]);
+
+            $result = $this->paymentService->verifyPayment($data);
+
+            return ApiResponseHelper::success($result, 'Payment verified successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Handle Razorpay webhook events
+     * POST /api/fees/webhook (public endpoint, no auth required)
+     */
+    public function handleWebhook(Request $request)
+    {
+        try {
+            $payload = $request->all();
+            $signature = $request->header('X-Razorpay-Signature', '');
+
+            $result = $this->paymentService->handleWebhook($payload, $signature);
+
+            return response()->json($result);
+
+        } catch (Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Get fees summary for authenticated student
+     * GET /api/fees/summary
+     * 
+     * Returns upcoming payment info and payment options (3 months, 6 months, 1 year)
+     */
+    public function getSummary(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('User not authenticated', 401);
+            }
+
+            $student = $user->student;
+
+            if (!$student) {
+                return ApiResponseHelper::error('No student profile linked to this user', 404);
+            }
+
+            $result = $this->feeService->getFeesSummary($student->student_id);
+
+            if (!$result['success']) {
+                return ApiResponseHelper::error($result['message'], 404);
+            }
+
+            return ApiResponseHelper::success([
+                'upcoming_payment' => $result['upcoming_payment'],
+                'payment_options' => $result['payment_options'],
+                'student' => $result['student'],
+            ], 'Fees summary retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Get payment history for authenticated student
+     * GET /api/fees/history
+     * 
+     * Query params:
+     * - start_date: string (optional, format: YYYY-MM-DD)
+     * - end_date: string (optional, format: YYYY-MM-DD)
+     * - per_page: int (optional, default: 15)
+     */
+    public function getHistory(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('User not authenticated', 401);
+            }
+
+            $student = $user->student;
+
+            if (!$student) {
+                return ApiResponseHelper::error('No student profile linked to this user', 404);
+            }
+
+            $request->validate([
+                'start_date' => 'nullable|date',
+                'end_date' => 'nullable|date|after_or_equal:start_date',
+                'per_page' => 'nullable|integer|min:1|max:100',
+            ]);
+
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $perPage = $request->input('per_page', 15);
+
+            $result = $this->feeService->getPaymentHistory(
+                $student->student_id,
+                $startDate,
+                $endDate,
+                $perPage
+            );
+
+            return ApiResponseHelper::success([
+                'payments' => $result['payments'],
+                'pagination' => $result['pagination'],
+            ], 'Payment history retrieved successfully');
+
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }

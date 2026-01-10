@@ -10,6 +10,7 @@ class Fee extends Model
     protected $table = 'fees';
     protected $primaryKey = 'fee_id';
     public $incrementing = true;
+    public $timestamps = false; // Legacy table has no timestamps
 
     protected $fillable = [
         'student_id',
@@ -22,6 +23,9 @@ class Fee extends Model
         'disabled',
         'mode',
         'remarks',
+        'up', // Added to fix legacy db error
+        'dump', // Added to fix legacy db error
+        'new_remarks', // Added to fix legacy db error
     ];
 
     protected $casts = [

@@ -1,0 +1,11 @@
+ERROR INSERTING FEE: SQLSTATE[HY000]: General error: 1364 Field 'new_remarks' doesn't have a default value (Connection: mysql, SQL: insert into `fees` (`student_id`, `months`, `year`, `date`, `amount`, `coupon_id`, `additional`, `disabled`, `mode`, `remarks`, `up`, `dump`) values (1, 12, 2025, 2025-12-10 00:00:00, 1500, 0, 0, 0, cash, Initial test data, 0, 0))
+#0 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\Connection.php(778): Illuminate\Database\Connection->runQueryCallback()
+#1 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\MySqlConnection.php(42): Illuminate\Database\Connection->run()
+#2 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\Query\Processors\MySqlProcessor.php(35): Illuminate\Database\MySqlConnection->insert()
+#3 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\Query\Builder.php(3853): Illuminate\Database\Query\Processors\MySqlProcessor->processInsertGetId()
+#4 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Builder.php(2235): Illuminate\Database\Query\Builder->insertGetId()
+#5 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Model.php(1436): Illuminate\Database\Eloquent\Builder->__call()
+#6 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Model.php(1401): Illuminate\Database\Eloquent\Model->insertAndSetId()
+#7 C:\Apache24\htdocs\rkkf\laravel-app\vendor\laravel\framework\src\Illuminate\Database\Eloquent\Model.php(1240): Illuminate\Database\Eloquent\Model->performInsert()
+#8 C:\Apache24\htdocs\rkkf\laravel-app\tests\insert_test_fee.php(110): Illuminate\Database\Eloquent\Model->save()
+#9 {main}
