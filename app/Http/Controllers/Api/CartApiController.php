@@ -182,4 +182,87 @@ class CartApiController extends Controller
         }
     }
 
+    /**
+     * Update Cart Item Quantity (Increment/Decrement)
+     * POST /api/cart/quantity
+     */
+    public function updateQuantity(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'cart_id' => 'required|integer|exists:cart,cart_id',
+                'action' => 'required|string|in:increment,decrement',
+            ]);
+
+            $user = $request->user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('Unauthorized', 401);
+            }
+
+            // Find student by email
+            $student = Student::where('email', $user->email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not found for this user', 404);
+            }
+
+            $studentId = $student->student_id;
+            $cartId = $validated['cart_id'];
+            $action = $validated['action'];
+
+            // Fetch cart item using cart_id and authenticated student id
+            $cartItem = Cart::where('cart_id', $cartId)
+                ->where('student_id', $studentId)
+                ->first();
+
+            if (!$cartItem) {
+                return ApiResponseHelper::error('Cart item not found or unauthorized', 404);
+            }
+
+            // Fetch product variation
+            $variation = Variation::find($cartItem->variation_id);
+
+            if (!$variation) {
+                return ApiResponseHelper::error('Product variation not found', 404);
+            }
+
+            if ($action === 'increment') {
+                // Check stock: variation.qty must be greater than cart.qty
+                if ($variation->qty > $cartItem->qty) {
+                    $cartItem->qty += 1;
+                    $cartItem->save();
+
+                    return ApiResponseHelper::success([
+                        'updated' => 1,
+                        'qty' => $cartItem->qty
+                    ], 'Quantity increased successfully.');
+                } else {
+                    return ApiResponseHelper::error('Quantity is not available at this moment!', 422);
+                }
+            } else {
+                // action is decrement
+                if ($cartItem->qty > 1) {
+                    $cartItem->qty -= 1;
+                    $cartItem->save();
+
+                    return ApiResponseHelper::success([
+                        'updated' => 1,
+                        'qty' => $cartItem->qty
+                    ], 'Quantity decreased successfully.');
+                } else {
+                    // qty is 1, delete the cart item
+                    $cartItem->delete();
+
+                    return ApiResponseHelper::success([
+                        'removed' => 1,
+                        'qty' => 0
+                    ], 'Product removed from cart.');
+                }
+            }
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
 }

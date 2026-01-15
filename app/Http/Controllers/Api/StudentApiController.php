@@ -378,4 +378,148 @@ class StudentApiController extends Controller
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
     }
+
+    /**
+     * Get student status (fees payment status, popup info)
+     * GET /api/students/status
+     * 
+     * Returns whether to show popup and type (discount, deactivatesoon, deactivated)
+     */
+    public function getStatus(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            // Get student associated with user
+            $student = \App\Models\Student::where('email', $user->email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not found', 404);
+            }
+
+            $studentId = $student->student_id;
+
+            // Get student data with fees calculation
+            $result = DB::selectOne("
+                SELECT 
+                    s.student_id, 
+                    s.active, 
+                    IFNULL(
+                        DATE_FORMAT(
+                            (SELECT DATE_FORMAT(CONCAT(year,'-',months,'-01'), '%Y-%m-%d') as mdate 
+                             FROM fees 
+                             WHERE student_id = s.student_id 
+                             ORDER BY mdate DESC 
+                             LIMIT 1), 
+                            '%Y-%m-%d'
+                        ),
+                        '1000-01-01'
+                    ) as last_fees_paid, 
+                    DATE_SUB(DATE_FORMAT(CONCAT(YEAR(NOW()),'-',MONTH(NOW()),'-01'), '%Y-%m-%d'), INTERVAL 1 MONTH) as must_fees, 
+                    DATE_FORMAT(CONCAT(YEAR(NOW()),'-',MONTH(NOW()),'-01'), '%Y-%m-%d') as current_month, 
+                    CURRENT_DATE as today_date
+                FROM students s 
+                WHERE s.student_id = ?
+            ", [$studentId]);
+
+            if (!$result) {
+                return ApiResponseHelper::error('Invalid Student ID!', 422);
+            }
+
+            $showpopup = false;
+            $type = "discount";
+            $active = $result->active;
+            $lastFeesPaid = $result->last_fees_paid;
+            $currentMonth = $result->current_month;
+            $mustFees = $result->must_fees;
+            $currentDate = $result->today_date;
+
+            if ($active == 1) {
+                if ($lastFeesPaid >= $currentMonth) {
+                    $showpopup = false;
+                    $type = "active";
+                } elseif ($lastFeesPaid == $mustFees) {
+                    $idate = (int) date("d", strtotime($currentDate));
+                    if ($idate <= 15) {
+                        $showpopup = true;
+                        $type = "discount";
+                    } else {
+                        $showpopup = true;
+                        $type = "deactivatesoon";
+                    }
+                } else {
+                    $showpopup = true;
+                    $type = "deactivated";
+                }
+            } else {
+                $showpopup = true;
+                $type = "deactivated";
+            }
+
+            $data = [
+                'student_id' => $result->student_id,
+                'active' => $result->active,
+                'last_fees_paid' => $result->last_fees_paid,
+                'must_fees' => $result->must_fees,
+                'current_month' => $result->current_month,
+                'current_date' => $result->today_date,
+                'showpopup' => $showpopup,
+                'type' => $type,
+            ];
+
+            return ApiResponseHelper::success([
+                'data' => $data,
+            ], 'Student status retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Get exam results for authenticated student
+     * GET /api/students/exam-results
+     */
+    public function getExamResults(Request $request)
+    {
+        try {
+            $user = $request->user();
+
+            // Get student associated with user
+            $student = \App\Models\Student::where('email', $user->email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not found', 404);
+            }
+
+            $studentId = $student->student_id;
+
+            // Get exam results with certificate info
+            // Only exams where belt_id > 2 (higher belt exams)
+            $results = DB::select("
+                SELECT 
+                    e.name, 
+                    ea.attend, 
+                    ea.certificate_no 
+                FROM exam_attendance ea
+                JOIN exam e ON ea.exam_id = e.exam_id
+                JOIN exam_fees ef ON ef.exam_id = ea.exam_id AND ef.student_id = ea.student_id
+                WHERE ef.exam_belt_id > 2 
+                AND ea.student_id = ?
+            ", [$studentId]);
+
+            if (empty($results)) {
+                return ApiResponseHelper::success([
+                    'data' => [],
+                ], 'No exam results found for this student');
+            }
+
+            return ApiResponseHelper::success([
+                'data' => $results,
+            ], 'Exam results retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
 }

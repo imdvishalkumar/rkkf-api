@@ -14,9 +14,15 @@ use App\Http\Controllers\Api\ProductApiController;
 use App\Http\Controllers\Api\CartApiController;
 use App\Http\Controllers\Api\EventCommentController;
 use App\Http\Controllers\Api\CategoryApiController;
+use App\Http\Controllers\Api\NotificationApiController;
+use App\Http\Controllers\Api\LeaveApiController;
 use App\Http\Controllers\Api\AdminAPI\SuperAdminController;
 use App\Http\Controllers\Api\AdminAPI\UserManagementController;
 use App\Http\Controllers\Api\AdminAPI\InstructorManagementController;
+use App\Http\Controllers\Api\BranchApiController;
+use App\Http\Controllers\Api\CouponApiController;
+use App\Http\Controllers\Api\FileUploadController;
+use App\Http\Controllers\Api\InstructorApiController;
 
 use App\Http\Controllers\Api\AdminAPI\UnifiedUserController;
 use App\Http\Controllers\Api\FrontendAPI\UserController as FrontendUserController;
@@ -31,6 +37,11 @@ use App\Http\Controllers\Api\FrontendAPI\InstructorController as FrontendInstruc
 Route::post('/login', [AuthApiController::class, 'login']);
 Route::post('/register', [AuthApiController::class, 'register']);
 Route::post('/admin/login', [SuperAdminController::class, 'login']);
+
+// Password Reset Routes (Public - No Auth Required)
+Route::post('/forgot-password', [AuthApiController::class, 'forgotPassword']);
+Route::post('/verify-reset-token', [AuthApiController::class, 'verifyResetToken']);
+Route::post('/update-password', [AuthApiController::class, 'updatePassword']);
 
 /*
 |--------------------------------------------------------------------------
@@ -79,6 +90,31 @@ Route::middleware('auth:sanctum')->group(function () {
         // Standard User & Instructor Management
         Route::apiResource('users', UserManagementController::class)->parameters(['users' => 'id']);
         Route::apiResource('instructors', InstructorManagementController::class)->parameters(['instructors' => 'id']);
+        Route::apiResource('branches', BranchApiController::class)->parameters(['branches' => 'id']); // Added
+    });
+
+    // fetch branch
+    Route::prefix('branches')->group(function () {
+        Route::get('/', [BranchApiController::class, 'index']);
+    });
+
+    // Instructor Specific APIs (Only accessible by Instructor or Admin roles)
+    Route::prefix('instructor')->middleware('role:instructor,admin')->group(function () {
+        Route::get('branches/{id}/days', [InstructorApiController::class, 'getBranchDays']);
+        Route::get('students/search', [InstructorApiController::class, 'searchStudents']);
+        Route::post('attendance/count', [InstructorApiController::class, 'getAttendanceCount']);
+        Route::post('fastrack/attendance', [InstructorApiController::class, 'insertFastrackAttendance']);
+
+        // Event Attendance
+        Route::get('events/for-attendance', [InstructorApiController::class, 'getEventsForAttendance']);
+        Route::get('events/{id}/students', [InstructorApiController::class, 'getStudentsForEvent']);
+        Route::post('events/attendance', [InstructorApiController::class, 'insertEventAttendance']);
+
+        // Exam Attendance
+        Route::get('exams/for-attendance', [InstructorApiController::class, 'getExamsForAttendance']);
+        Route::get('exams/{id}/students', [InstructorApiController::class, 'getStudentsForExam']);
+        Route::post('exams/attendance', [InstructorApiController::class, 'insertExamAttendance']);
+        Route::get('exams/{id}', [InstructorApiController::class, 'getExamDetails']);
     });
 
     // Attendance APIs (role check done in controller)
@@ -106,13 +142,21 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('profile', [StudentApiController::class, 'updateProfile']);
         Route::get('profile', [StudentApiController::class, 'getProfile']);
         Route::get('attendance', [StudentApiController::class, 'getAttendanceOverview']);
+        Route::get('status', [StudentApiController::class, 'getStatus']);
+        Route::get('exam-results', [StudentApiController::class, 'getExamResults']);
     });
+
+    // Coupon Validation
+    Route::get('coupons/validate', [CouponApiController::class, 'validate']);
+
+    // File Upload
+    Route::post('upload', [FileUploadController::class, 'upload']);
 
     Route::prefix('events')->group(function () {
         Route::get('/', [EventApiController::class, 'index']);
         Route::get('upcoming', [EventApiController::class, 'upcoming']);
         Route::post('/', [EventApiController::class, 'store']);
-        Route::get('{id}', [EventApiController::class, 'show']);
+        Route::get('/details/{id}', [EventApiController::class, 'show']);
         Route::put('{id}', [EventApiController::class, 'update']);
         Route::delete('{id}', [EventApiController::class, 'destroy']);
 
@@ -143,6 +187,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('cart')->group(function () {
         Route::get('/', [CartApiController::class, 'index']);
         Route::post('/', [CartApiController::class, 'store']);
+        Route::post('quantity', [CartApiController::class, 'updateQuantity']);
         Route::delete('{id}', [CartApiController::class, 'destroy']);
     });
 
@@ -166,11 +211,24 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('payment/verify', [FeeApiController::class, 'verifyPayment']);
     });
 
+    Route::prefix('orders')->group(function () {
+        Route::get('get-orders', [OrderApiController::class, 'getOrders']); // Admin/General list
+        Route::get('my-orders', [OrderApiController::class, 'myOrders']); // Student specific
+        Route::post('viewed', [OrderApiController::class, 'markViewed']);
+        Route::post('delivered', [OrderApiController::class, 'markDelivered']);
+        // Delete product route was inside OrderController? Keeping it if legacy requires.
+        Route::post('delete-product', [OrderApiController::class, 'deleteProduct']);
+        Route::post('review', [OrderApiController::class, 'submitReview']);
+    });
+
     // Leave Management APIs
     Route::prefix('leaves')->group(function () {
-        Route::post('apply', [\App\Http\Controllers\Api\LeaveApiController::class, 'apply']);
-        Route::get('history', [\App\Http\Controllers\Api\LeaveApiController::class, 'history']);
+        Route::post('apply', [LeaveApiController::class, 'apply']);
+        Route::get('history', [LeaveApiController::class, 'history']);
     });
+
+    // Notifications API
+    Route::get('notifications', [NotificationApiController::class, 'index']);
 
 });
 

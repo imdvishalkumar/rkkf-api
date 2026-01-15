@@ -346,4 +346,174 @@ class AuthApiController extends Controller
             );
         }
     }
+
+    /**
+     * Send password reset token via email
+     * POST /api/forgot-password
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function forgotPassword(Request $request)
+    {
+        try {
+            $request->validate([
+                'email' => 'required|email',
+            ]);
+
+            $email = trim($request->email);
+
+            // Find student by email
+            $student = Student::where('email', $email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Invalid Email Address!', 422);
+            }
+
+            // Generate reset token
+            $token = md5($email) . rand(10, 9999);
+            $expDate = now()->addDay(); // 24 hours expiry
+
+            // Update student with reset token
+            $student->reset_link_token = $token;
+            $student->exp_date = $expDate;
+            $student->save();
+
+            // Send email with token
+            try {
+                \Illuminate\Support\Facades\Mail::raw(
+                    "Your password reset token is: {$token}\n\nThis token will expire in 24 hours.",
+                    function ($message) use ($email) {
+                        $message->to($email)
+                            ->subject('RKKF - Password Reset Token');
+                    }
+                );
+
+                return ApiResponseHelper::success([
+                    'done' => 1,
+                ], 'We have successfully sent you password reset token to your email.');
+
+            } catch (\Exception $mailException) {
+                Log::error('Failed to send password reset email', [
+                    'email' => $email,
+                    'error' => $mailException->getMessage()
+                ]);
+                return ApiResponseHelper::error('Failed to send email!', 422);
+            }
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return ApiResponseHelper::validationError($e->errors());
+        } catch (\Exception $e) {
+            return ApiResponseHelper::error(
+                'Failed to process request',
+                500,
+                ['error' => $e->getMessage()]
+            );
+        }
+    }
+
+    /**
+     * Verify password reset token
+     * POST /api/verify-reset-token
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function verifyResetToken(Request $request)
+    {
+        try {
+            $request->validate([
+                'email' => 'required|email',
+                'token' => 'required|string',
+            ]);
+
+            $email = trim($request->email);
+            $token = trim($request->token);
+
+            // Find student with matching email and token
+            $student = Student::where('email', $email)
+                ->where('reset_link_token', $token)
+                ->first();
+
+            if (!$student) {
+                return ApiResponseHelper::success([
+                    'tokenMatched' => false,
+                ], 'Incorrect Token.');
+            }
+
+            // Check if token has expired
+            $currentDate = now();
+            if ($student->exp_date && $student->exp_date >= $currentDate) {
+                return ApiResponseHelper::success([
+                    'tokenMatched' => true,
+                ], 'Token validated successfully.');
+            } else {
+                return ApiResponseHelper::success([
+                    'tokenMatched' => false,
+                ], 'Token Expired!');
+            }
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return ApiResponseHelper::validationError($e->errors());
+        } catch (\Exception $e) {
+            return ApiResponseHelper::error(
+                'Failed to verify token',
+                500,
+                ['error' => $e->getMessage()]
+            );
+        }
+    }
+
+    /**
+     * Update password after reset token verification
+     * POST /api/update-password
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updatePassword(Request $request)
+    {
+        try {
+            $request->validate([
+                'email' => 'required|email',
+                'password' => 'required|string|min:6',
+            ]);
+
+            $email = trim($request->email);
+            $password = $request->password;
+
+            // Find student by email
+            $student = Student::where('email', $email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Invalid Email Address!', 422);
+            }
+
+            // Update password and clear reset token
+            $student->password = Hash::make($password);
+            $student->reset_link_token = null;
+            $student->exp_date = null;
+            $student->save();
+
+            // Also update User table if exists
+            $user = User::where('email', $email)->first();
+            if ($user) {
+                $user->password = Hash::make($password);
+                $user->save();
+            }
+
+            return ApiResponseHelper::success([
+                'updated' => true,
+            ], 'Password Updated Successfully.');
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return ApiResponseHelper::validationError($e->errors());
+        } catch (\Exception $e) {
+            return ApiResponseHelper::error(
+                'Error while updating password',
+                500,
+                ['error' => $e->getMessage()]
+            );
+        }
+    }
 }

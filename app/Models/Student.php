@@ -33,6 +33,8 @@ class Student extends Model
         'pincode',
         'active',
         'profile_img',
+        'reset_link_token',
+        'exp_date',
     ];
 
     protected $hidden = [

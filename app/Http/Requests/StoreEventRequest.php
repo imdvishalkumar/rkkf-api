@@ -16,7 +16,7 @@ class StoreEventRequest extends FormRequest
         return [
             'title' => 'required|string|max:255',
             'event_start_datetime' => 'required|date',
-            'event_end_datetime' => 'required|date|after:event_start_datetime',
+            'event_end_datetime' => 'nullable|date|after_or_equal:event_start_datetime',
             'description' => 'nullable|string',
             'venue' => 'nullable|string',
             'fees' => 'nullable|numeric',

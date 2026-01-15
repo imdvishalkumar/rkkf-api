@@ -10,22 +10,30 @@ class Order extends Model
     protected $table = 'orders';
     protected $primaryKey = 'order_id';
     public $incrementing = true;
+    public $timestamps = false; // DB does not have timestamps
 
     protected $fillable = [
         'student_id',
         'product_id',
-        'quantity',
-        'amount',
+        'qty',
+        'p_price',
         'status',
         'viewed',
         'date',
+        'variation_id',
+        'flag_delivered',
+        'counter',
+        'rp_order_id',
+        'name_var',
+        'variation_id',
+        'flag',
     ];
 
     protected $casts = [
         'date' => 'date',
         'status' => 'boolean',
         'viewed' => 'boolean',
-        'amount' => 'decimal:2',
+        'p_price' => 'decimal:2',
     ];
 
     /**

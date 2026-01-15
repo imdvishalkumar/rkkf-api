@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Variation extends Model
 {
     protected $table = 'variation';
-    protected $primaryKey = 'variation_id';
+    protected $primaryKey = 'id';
     public $incrementing = true;
 
     protected $fillable = [

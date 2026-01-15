@@ -40,7 +40,7 @@ class LeaveApiController extends Controller
             }
 
             $request->validate([
-                'from_date' => 'required|date|after_or_equal:today',
+                'from_date' => 'required|date',
                 'to_date' => 'required|date|after_or_equal:from_date',
                 'reason' => 'required|string|max:500',
             ]);

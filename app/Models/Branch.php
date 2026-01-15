@@ -17,6 +17,16 @@ class Branch extends Model
         'fees',
         'late',
         'discount',
+        'address',
+        'city',
+        'state',
+        'zip_code',
+        'phone',
+        'email',
+        'latitude',
+        'longitude',
+        'map_link',
+        'is_active',
     ];
 
     /**

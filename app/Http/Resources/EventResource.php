@@ -35,6 +35,10 @@ class EventResource extends JsonResource
             'title' => $this->title, // Accessor
             'subtitle' => $this->subtitle,
             'date' => $this->from_date ? $this->from_date->format('Y-m-d') : null,
+            'venue' => $this->venue,
+            'organizer_time' => ($this->from_date ? $this->from_date->format('h:i a') : '') .
+                ($this->to_date ? ' ' . $this->to_date->format('h:i a') : ''),
+            'description' => $this->description,
             'likes' => $likeCount, // Use actual like count from event_likes table
             'comments' => $this->event_comments_count ?? 0,
             'shares' => $this->event_shares_count ?? 0,

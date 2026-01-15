@@ -68,7 +68,7 @@ class EventService
         DB::beginTransaction();
         try {
             $dbData = $this->mapToDb($data);
-            $this->eventRepository->update($event, $dbData);
+            $this->eventRepository->update($id, $dbData);
 
             DB::commit();
             return $event;
@@ -85,7 +85,7 @@ class EventService
             return false;
         }
 
-        return $this->eventRepository->delete($event);
+        return $this->eventRepository->delete($id);
     }
 
     public function getUpcomingEvents()
@@ -112,6 +112,9 @@ class EventService
         if (isset($data['event_end_datetime'])) {
             $mapped['to_date'] = $data['event_end_datetime'];
             unset($mapped['event_end_datetime']);
+        } else {
+            // Default to start date if end date is missing
+            $mapped['to_date'] = $mapped['from_date'] ?? null;
         }
 
         // Default legacy required fields if missing in API

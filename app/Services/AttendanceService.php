@@ -178,8 +178,10 @@ class AttendanceService
             }
         }
 
-        // Calculate percentage (based on total records found, matching legacy logic)
+        // Calculate percentages
         $percentage = $totalDays > 0 ? round(($present / $totalDays) * 100, 2) : 0;
+        $absentPercentage = $totalDays > 0 ? round(($absent / $totalDays) * 100, 2) : 0;
+        $leavePercentage = $totalDays > 0 ? round(($leave / $totalDays) * 100, 2) : 0;
 
         return [
             'overview' => [
@@ -187,7 +189,9 @@ class AttendanceService
                 'absent' => $absent,
                 'leave' => $leave,
                 'total_days' => $totalDays,
-                'percentage' => $percentage
+                'percentage' => $percentage,
+                'absent_percentage' => $absentPercentage,
+                'leave_percentage' => $leavePercentage
             ],
             'records' => $attendanceRecords // Optional if needed for detailed view later
         ];

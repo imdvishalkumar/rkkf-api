@@ -2,87 +2,73 @@
 
 namespace App\Services;
 
-use App\Repositories\Contracts\BranchRepositoryInterface;
+use App\Models\Branch;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Exception;
 
 class BranchService
 {
-    protected $branchRepository;
-
-    public function __construct(BranchRepositoryInterface $branchRepository)
-    {
-        $this->branchRepository = $branchRepository;
-    }
-
     public function getAllBranches()
     {
-        return $this->branchRepository->all();
+        return Branch::where('is_active', 1)->get();
     }
 
-    public function getBranchById(int $id)
+    public function getBranchById($id)
     {
-        $branch = $this->branchRepository->find($id);
-        
-        if (!$branch) {
-            throw new Exception('Branch not found', 404);
-        }
-
-        return $branch;
+        return Branch::find($id);
     }
 
-    public function createBranch(array $data): array
+    public function createBranch(array $data)
     {
         DB::beginTransaction();
-        
+
         try {
-            $branch = $this->branchRepository->create($data);
+            // Ensure defaults
+            if (!isset($data['is_active'])) {
+                $data['is_active'] = true;
+            }
+
+            $branch = Branch::create($data);
 
             DB::commit();
-
-            return [
-                'branch' => $branch,
-                'message' => 'Branch created successfully'
-            ];
+            return $branch;
 
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error('Error creating branch: ' . $e->getMessage());
             throw $e;
         }
     }
 
-    public function updateBranch(int $id, array $data): array
+    public function updateBranch($id, array $data)
     {
-        $branch = $this->branchRepository->find($id);
-        
+        $branch = Branch::find($id);
+
         if (!$branch) {
-            throw new Exception('Branch not found', 404);
+            return null;
         }
 
-        $updated = $this->branchRepository->update($id, $data);
-
-        if (!$updated) {
-            throw new Exception('Failed to update branch', 500);
+        DB::beginTransaction();
+        try {
+            $branch->update($data);
+            DB::commit();
+            return $branch;
+        } catch (Exception $e) {
+            DB::rollBack();
+            throw $e;
         }
-
-        return [
-            'branch' => $this->branchRepository->find($id),
-            'message' => 'Branch updated successfully'
-        ];
     }
 
-    public function deleteBranch(int $id): bool
+    public function deleteBranch($id)
     {
-        $branch = $this->branchRepository->find($id);
-        
+        $branch = Branch::find($id);
         if (!$branch) {
-            throw new Exception('Branch not found', 404);
+            return false;
         }
 
-        return $this->branchRepository->delete($id);
+        // Optional: Check conflicts (e.g. students assigned to branch)
+        // If students exist, maybe just deactivate?
+        // For now, attempting delete.
+
+        return $branch->delete();
     }
 }
-
-
