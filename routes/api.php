@@ -155,6 +155,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('events')->group(function () {
         Route::get('/', [EventApiController::class, 'index']);
         Route::get('upcoming', [EventApiController::class, 'upcoming']);
+        Route::get('current', [EventApiController::class, 'getCurrentEvents']);
+        Route::get('past', [EventApiController::class, 'getPastEvents']);
         Route::post('/', [EventApiController::class, 'store']);
         Route::get('/details/{id}', [EventApiController::class, 'show']);
         Route::put('{id}', [EventApiController::class, 'update']);
@@ -167,6 +169,15 @@ Route::middleware('auth:sanctum')->group(function () {
         // Event comment endpoints (require authentication)
         Route::post('/{event_id}/comments', [EventCommentController::class, 'store']);
         Route::get('/{event_id}/comments', [EventCommentController::class, 'index']);
+    });
+
+    // Exam APIs for students
+    Route::prefix('exams')->group(function () {
+        Route::get('progress', [ExamApiController::class, 'getProgress']);
+        Route::get('list', [ExamApiController::class, 'getUpcomingExams']);
+        Route::get('results/overview', [ExamApiController::class, 'getResultsOverview']);
+        Route::get('results', [ExamApiController::class, 'getResults']);
+        Route::get('results/{id}', [ExamApiController::class, 'getResultDetails']);
     });
 
     // Comment Likes (moved outside events to avoid conflict with event likes)

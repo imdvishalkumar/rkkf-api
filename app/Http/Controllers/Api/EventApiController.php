@@ -250,4 +250,130 @@ class EventApiController extends Controller
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
     }
+
+    /**
+     * Get current/upcoming events for authenticated student
+     * GET /api/events/current
+     * 
+     * Returns events where from_date > current date with applied status
+     */
+    public function getCurrentEvents(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $student = \App\Models\Student::where('email', $user->email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not found', 404);
+            }
+
+            $studentId = $student->student_id;
+            $today = date('Y-m-d');
+
+            // Get upcoming events with applied status
+            $events = DB::table('event as e')
+                ->select([
+                    'e.event_id',
+                    'e.name',
+                    'e.from_date',
+                    'e.to_date',
+                    'e.venue',
+                    'e.fees',
+                    'e.penalty',
+                    'e.fees_due_date',
+                    'e.penalty_due_date',
+                    'e.description',
+                    'e.image',
+                    DB::raw("EXISTS (SELECT 1 FROM event_fees WHERE student_id = {$studentId} AND event_id = e.event_id AND status = 1) as applied")
+                ])
+                ->where('e.from_date', '>=', $today)
+                ->orderBy('e.from_date', 'asc')
+                ->get();
+
+            // Add computed fields
+            $events = $events->map(function ($event) use ($today) {
+                $event->is_penalty = $event->fees_due_date <= $today;
+                $event->entry_open = $event->penalty_due_date >= $today;
+
+                // Determine status
+                if ($event->applied) {
+                    $event->status = 'Applied';
+                } elseif (!$event->entry_open) {
+                    $event->status = 'Registration Closed';
+                } else {
+                    $event->status = 'Not Applied';
+                }
+
+                // Add image URL
+                if ($event->image) {
+                    $event->image_url = asset('uploads/events/' . $event->image);
+                }
+
+                return $event;
+            });
+
+            return ApiResponseHelper::success($events, 'Current events retrieved successfully');
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Get past events for authenticated student
+     * GET /api/events/past
+     * 
+     * Returns past events with applied and attended status
+     */
+    public function getPastEvents(Request $request)
+    {
+        try {
+            $user = $request->user();
+            $student = \App\Models\Student::where('email', $user->email)->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student profile not found', 404);
+            }
+
+            $studentId = $student->student_id;
+            $today = date('Y-m-d');
+
+            // Get past events with applied and attended status
+            $events = DB::table('event as e')
+                ->select([
+                    'e.event_id',
+                    'e.name',
+                    'e.from_date',
+                    'e.to_date',
+                    'e.venue',
+                    'e.description',
+                    'e.image',
+                    DB::raw("EXISTS (SELECT 1 FROM event_fees WHERE student_id = {$studentId} AND event_id = e.event_id) as applied"),
+                    DB::raw("EXISTS (SELECT 1 FROM event_attendance WHERE student_id = {$studentId} AND event_id = e.event_id) as attended")
+                ])
+                ->where('e.to_date', '<', $today)
+                ->orderBy('e.from_date', 'desc')
+                ->get();
+
+            // Add image URL and status
+            $events = $events->map(function ($event) {
+                if ($event->attended) {
+                    $event->status = 'Attended';
+                } elseif ($event->applied) {
+                    $event->status = 'Applied (Not Attended)';
+                } else {
+                    $event->status = 'Not Participated';
+                }
+
+                if ($event->image) {
+                    $event->image_url = asset('uploads/events/' . $event->image);
+                }
+
+                return $event;
+            });
+
+            return ApiResponseHelper::success($events, 'Past events retrieved successfully');
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
 }
