@@ -23,6 +23,7 @@ use App\Http\Controllers\Api\BranchApiController;
 use App\Http\Controllers\Api\CouponApiController;
 use App\Http\Controllers\Api\FileUploadController;
 use App\Http\Controllers\Api\InstructorApiController;
+use App\Http\Controllers\Api\BeltApiController;
 
 use App\Http\Controllers\Api\AdminAPI\UnifiedUserController;
 use App\Http\Controllers\Api\FrontendAPI\UserController as FrontendUserController;
@@ -91,6 +92,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('users', UserManagementController::class)->parameters(['users' => 'id']);
         Route::apiResource('instructors', InstructorManagementController::class)->parameters(['instructors' => 'id']);
         Route::apiResource('branches', BranchApiController::class)->parameters(['branches' => 'id']); // Added
+        Route::get('belts', [BeltApiController::class, 'index']);
     });
 
     // fetch branch
@@ -174,10 +176,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Exam APIs for students
     Route::prefix('exams')->group(function () {
         Route::get('progress', [ExamApiController::class, 'getProgress']);
-        Route::get('list', [ExamApiController::class, 'getUpcomingExams']);
         Route::get('results/overview', [ExamApiController::class, 'getResultsOverview']);
         Route::get('results', [ExamApiController::class, 'getResults']);
-        Route::get('results/{id}', [ExamApiController::class, 'getResultDetails']);
     });
 
     // Comment Likes (moved outside events to avoid conflict with event likes)

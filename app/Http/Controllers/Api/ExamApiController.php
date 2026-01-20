@@ -195,7 +195,7 @@ class ExamApiController extends Controller
      * Get exam progress for authenticated student
      * GET /api/exams/progress
      * 
-     * Returns count of exams applied and total exams available
+     * Returns count of exams applied, total exams, and list of upcoming exams with eligibility
      */
     public function getProgress(Request $request)
     {
@@ -208,6 +208,7 @@ class ExamApiController extends Controller
             }
 
             $studentId = $student->student_id;
+            $today = date('Y-m-d');
 
             // Count exams applied (paid)
             $examsApplied = DB::table('exam_fees')
@@ -220,39 +221,11 @@ class ExamApiController extends Controller
                 ->where('isPublished', 1)
                 ->count();
 
-            return ApiResponseHelper::success([
-                'exams_applied' => $examsApplied,
-                'total_exams' => $totalExams
-            ], 'Exam progress retrieved successfully');
-        } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
-        }
-    }
-
-    /**
-     * Get upcoming exams with eligibility info for authenticated student
-     * GET /api/exams/list
-     * 
-     * Returns upcoming exams with eligibility percentage and status
-     */
-    public function getUpcomingExams(Request $request)
-    {
-        try {
-            $user = $request->user();
-            $student = \App\Models\Student::where('email', $user->email)->first();
-
-            if (!$student) {
-                return ApiResponseHelper::error('Student profile not found', 404);
-            }
-
-            $studentId = $student->student_id;
-            $today = date('Y-m-d');
-
-            // Get upcoming published exams
+            // --- Get Exam List Logic (merged from getUpcomingExams) ---
             $exams = DB::table('exam as e')
                 ->select([
                     'e.exam_id',
-                    'e.name',
+                    'e.name as exam_name', // Consistency in naming
                     'e.date',
                     'e.location',
                     'e.fees as exam_fees',
@@ -266,7 +239,6 @@ class ExamApiController extends Controller
                 ->orderBy('e.date', 'asc')
                 ->get();
 
-            // Process each exam for eligibility
             $exams = $exams->map(function ($exam) use ($studentId, $today) {
                 // Check if already paid
                 $paid = DB::table('exam_fees')
@@ -283,6 +255,8 @@ class ExamApiController extends Controller
                     $exam->eligibility_attendance = true;
                     $exam->eligibility_fees = true;
                     $exam->ineligibility_reason = null;
+                    // Format date
+                    $exam->formatted_date = date('F j, Y', strtotime($exam->date));
                     return $exam;
                 }
 
@@ -295,7 +269,7 @@ class ExamApiController extends Controller
 
                 $eligibleAttendance = $attendanceCount >= $exam->sessions_count;
 
-                // Calculate eligibility percentage based on attendance
+                // Calculate eligibility percentage
                 $eligibilityPercentage = $exam->sessions_count > 0
                     ? min(100, round(($attendanceCount / $exam->sessions_count) * 100))
                     : 0;
@@ -328,27 +302,25 @@ class ExamApiController extends Controller
                     }
                 }
 
-                // Check if due date gone
+                // Check due date
                 $dueDateGone = strtotime($today) > strtotime($exam->fees_due_date);
 
                 $exam->eligibility_percentage = $eligibilityPercentage;
                 $exam->eligibility_attendance = $eligibleAttendance;
                 $exam->eligibility_fees = $eligibleFees;
                 $exam->due_date_gone = $dueDateGone;
+                $exam->formatted_date = date('F j, Y', strtotime($exam->date));
 
-                // Determine status and reason
                 if ($eligibleAttendance && $eligibleFees) {
-                    $exam->status = 'Eligible';
+                    $exam->status = 'Eligible'; // Could be 'Not Applied' but Eligible
                     $exam->ineligibility_reason = null;
                 } else {
                     $exam->status = 'Not Eligible';
                     $reasons = [];
-                    if (!$eligibleAttendance) {
+                    if (!$eligibleAttendance)
                         $reasons[] = 'poor attendance';
-                    }
-                    if (!$eligibleFees) {
+                    if (!$eligibleFees)
                         $reasons[] = 'pending fee payments';
-                    }
                     $exam->ineligibility_reason = 'Not Eligible for Exam due to ' . implode(' and ', $reasons);
                 }
 
@@ -368,7 +340,14 @@ class ExamApiController extends Controller
                 return $exam;
             });
 
-            return ApiResponseHelper::success($exams, 'Upcoming exams retrieved successfully');
+            return ApiResponseHelper::success([
+                'summary' => [
+                    'exams_applied' => $examsApplied,
+                    'total_exams' => $totalExams
+                ],
+                'exams' => $exams
+            ], 'Exam progress retrieved successfully');
+
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
@@ -430,6 +409,12 @@ class ExamApiController extends Controller
      * 
      * Returns all exam results with pass/fail status, certificate info
      */
+    /**
+     * Get all exam results for authenticated student with performance stats
+     * GET /api/exams/results
+     * 
+     * Returns dashboard with performance stats and list of all exam results
+     */
     public function getResults(Request $request)
     {
         try {
@@ -442,7 +427,33 @@ class ExamApiController extends Controller
 
             $studentId = $student->student_id;
 
-            // Get all exam results with belt info
+            // --- 1. Get Overall Performance Stats ---
+            $allAssessments = DB::table('exam_attendance as ea')
+                ->join('exam_fees as ef', function ($join) {
+                    $join->on('ef.exam_id', '=', 'ea.exam_id')
+                        ->on('ef.student_id', '=', 'ea.student_id');
+                })
+                ->where('ea.student_id', $studentId)
+                ->where('ef.exam_belt_id', '>', 2)
+                ->select('ea.attend')
+                ->get();
+
+            $totalExams = $allAssessments->count();
+            $passed = $allAssessments->where('attend', 'P')->count();
+            $failed = $allAssessments->where('attend', 'F')->count();
+
+            $performancePercentage = $totalExams > 0
+                ? round(($passed / $totalExams) * 100)
+                : 0;
+
+            $performanceStats = [
+                'total' => $totalExams,
+                'passed' => $passed,
+                'failed' => $failed,
+                'percentage' => $performancePercentage
+            ];
+
+            // --- 2. Get All Exam Results with Details ---
             $results = DB::table('exam_attendance as ea')
                 ->join('exam as e', 'ea.exam_id', '=', 'e.exam_id')
                 ->join('exam_fees as ef', function ($join) {
@@ -458,6 +469,7 @@ class ExamApiController extends Controller
                     'ea.exam_id',
                     'e.name as exam_name',
                     'e.date as exam_date',
+                    'e.location',
                     'ea.attend',
                     'ea.certificate_no',
                     'from_belt.name as from_belt',
@@ -467,86 +479,35 @@ class ExamApiController extends Controller
                 ->get();
 
             // Process results
-            $results = $results->map(function ($result) {
+            $formattedResults = $results->map(function ($result) {
                 $result->status = $result->attend === 'P' ? 'Pass' : ($result->attend === 'F' ? 'Fail' : 'Special');
+                $result->is_passed = $result->status === 'Pass';
 
-                // Add remarks based on status if not set
-                // Add remarks based on status
                 $result->remarks = $result->status === 'Pass'
                     ? 'Congratulations!'
                     : 'Better Luck Next Time!';
 
-                // Add certificate download URL if passed
                 if ($result->status === 'Pass' && $result->certificate_no) {
                     $result->download_certificate_url = "/api/certificates/{$result->certificate_no}";
                 }
 
+                $result->belt_transition = [
+                    'from' => $result->from_belt ?? 'Unknown',
+                    'to' => $result->to_belt ?? 'Unknown'
+                ];
+
+                // Cleanup raw fields if preferred, or keep them
+                unset($result->from_belt);
+                unset($result->to_belt);
+
                 return $result;
             });
 
-            return ApiResponseHelper::success($results, 'Exam results retrieved successfully');
-        } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
-        }
-    }
+            return ApiResponseHelper::success([
+                'performance_stats' => $performanceStats,
+                'results' => $formattedResults
+            ], 'Exam results retrieved successfully');
 
-    /**
-     * Get single exam result details for authenticated student
-     * GET /api/exams/results/{id}
-     * 
-     * Returns detailed exam result info
-     */
-    public function getResultDetails(Request $request, $id)
-    {
-        try {
-            $user = $request->user();
-            $student = \App\Models\Student::where('email', $user->email)->first();
-
-            if (!$student) {
-                return ApiResponseHelper::error('Student profile not found', 404);
-            }
-
-            $studentId = $student->student_id;
-
-            // Get specific exam result
-            $result = DB::table('exam_attendance as ea')
-                ->join('exam as e', 'ea.exam_id', '=', 'e.exam_id')
-                ->join('exam_fees as ef', function ($join) {
-                    $join->on('ef.exam_id', '=', 'ea.exam_id')
-                        ->on('ef.student_id', '=', 'ea.student_id');
-                })
-                ->leftJoin('belt as from_belt', 'ef.exam_belt_id', '=', DB::raw('from_belt.belt_id + 1'))
-                ->leftJoin('belt as to_belt', 'ef.exam_belt_id', '=', 'to_belt.belt_id')
-                ->where('ea.student_id', $studentId)
-                ->where('ea.exam_attendance_id', $id)
-                ->select([
-                    'ea.exam_attendance_id',
-                    'ea.exam_id',
-                    'e.name as exam_name',
-                    'e.date as exam_date',
-                    'e.location',
-                    'ea.attend',
-                    'ea.certificate_no',
-                    'from_belt.name as from_belt',
-                    'to_belt.name as to_belt'
-                ])
-                ->first();
-
-            if (!$result) {
-                return ApiResponseHelper::error('Exam result not found', 404);
-            }
-
-            $result->status = $result->attend === 'P' ? 'Pass' : ($result->attend === 'F' ? 'Fail' : 'Special');
-
-            $result->remarks = $result->status === 'Pass'
-                ? 'Congratulations!'
-                : 'Better Luck Next Time!';
-
-            if ($result->status === 'Pass' && $result->certificate_no) {
-                $result->download_certificate_url = "/api/certificates/{$result->certificate_no}";
-            }
-
-            return ApiResponseHelper::success($result, 'Exam result details retrieved successfully');
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
