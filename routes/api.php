@@ -43,7 +43,7 @@ Route::post('/admin/login', [SuperAdminController::class, 'login']);
 Route::post('/forgot-password', [AuthApiController::class, 'forgotPassword']);
 Route::post('/verify-reset-token', [AuthApiController::class, 'verifyResetToken']);
 Route::post('/update-password', [AuthApiController::class, 'updatePassword']);
-
+Route::get('exams/results/{certificate_no}/download', [ExamApiController::class, 'downloadResultCertificate'])->name('api.exams.results.download');
 /*
 |--------------------------------------------------------------------------
 | Protected APIs
@@ -96,12 +96,14 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // fetch branch
-    Route::prefix('branches')->group(function () {
+    Route::prefix('branch')->group(function () {
         Route::get('/', [BranchApiController::class, 'index']);
     });
 
     // Instructor Specific APIs (Only accessible by Instructor or Admin roles)
     Route::prefix('instructor')->middleware('role:instructor,admin')->group(function () {
+        // Branch APIs
+        Route::get('branches', [InstructorApiController::class, 'getAllBranches']);
         Route::get('branches/{id}/days', [InstructorApiController::class, 'getBranchDays']);
         Route::get('students/search', [InstructorApiController::class, 'searchStudents']);
         Route::post('attendance/count', [InstructorApiController::class, 'getAttendanceCount']);
@@ -117,18 +119,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('exams/{id}/students', [InstructorApiController::class, 'getStudentsForExam']);
         Route::post('exams/attendance', [InstructorApiController::class, 'insertExamAttendance']);
         Route::get('exams/{id}', [InstructorApiController::class, 'getExamDetails']);
+
+        Route::post('take-attendance', [AttendanceApiController::class, 'insertAttendance']);
+        Route::post('take-additional-attendance', [AttendanceApiController::class, 'takeAdditionalAttendance']);
     });
 
     // Attendance APIs (role check done in controller)
     Route::prefix('attendance')->group(function () {
         Route::get('get-students', [AttendanceApiController::class, 'getStudents']);
-        Route::get('get-attendance', [AttendanceApiController::class, 'getAttendance']);
-        Route::post('insert', [AttendanceApiController::class, 'insertAttendance']);
 
         Route::prefix('additional')->group(function () {
             Route::get('get-students', [AttendanceApiController::class, 'getAdditionalStudents']);
-            Route::get('get-attendance', [AttendanceApiController::class, 'getAdditionalAttendance']);
-            Route::post('insert', [AttendanceApiController::class, 'insertAdditionalAttendance']);
         });
 
         Route::get('log', [AttendanceApiController::class, 'getAttendanceLog']);
@@ -184,7 +185,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('comments/{comment_id}/like', [EventCommentController::class, 'toggleLike']);
 
     Route::prefix('products')->group(function () {
-        Route::get('list', [ProductApiController::class, 'getProductList']);
+        Route::get('list', [ProductApiController::class, 'TTT']);
         Route::post('store', [ProductApiController::class, 'store']);
         Route::get('{product_id}', [ProductApiController::class, 'show']);
         Route::get('show/{product_id}', [ProductApiController::class, 'productDetails']);

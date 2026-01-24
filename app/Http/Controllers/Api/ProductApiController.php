@@ -72,11 +72,6 @@ class ProductApiController extends Controller
                 'categories' => $categories,
             ];
 
-            // If no belt_id filter, also include belts list (preserve legacy field)
-            if (!$beltId) {
-                $response['belt'] = $this->beltService->getAllBelts();
-            }
-
             return response()->json($response, 200);
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
@@ -444,7 +439,19 @@ class ProductApiController extends Controller
 
         $price = '0.00';
         if ($product->variations && $product->variations->isNotEmpty()) {
+            // Calculate price from the first variation (Model)
             $price = number_format($product->variations->first()->price, 2, '.', '');
+
+            // Transform variations to arrays to include available_qty and max_perchase_qty in JSON
+            $transformed = $product->variations->map(function ($variation) {
+                $v = $variation instanceof \Illuminate\Database\Eloquent\Model ? $variation->toArray() : (array) $variation;
+                $qty = (int) ($v['qty'] ?? 0);
+                $v['available_qty'] = $qty;
+                $v['max_perchase_qty'] = min(5, $qty);
+                unset($v['qty']);
+                return $v;
+            });
+            $product->setRelation('variations', $transformed);
         }
         $product->price = $price;
         $product->rating = null;

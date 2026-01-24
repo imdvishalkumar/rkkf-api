@@ -24,9 +24,12 @@ class UpdateStudentProfileRequest extends FormRequest
         return [
             'address' => 'nullable|string|max:500',
             'pincode' => 'nullable|string|max:10',
+            'dadno' => 'nullable|string|max:20',
             'dadwp' => 'nullable|string|max:20',
-            'selfno' => 'nullable|string|max:20',
             'momno' => 'nullable|string|max:20',
+            'momwp' => 'nullable|string|max:20',
+            'selfno' => 'nullable|string|max:20',
+            'selfwp' => 'nullable|string|max:20',
             'profile_img' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ];
     }

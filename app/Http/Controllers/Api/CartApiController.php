@@ -183,7 +183,7 @@ class CartApiController extends Controller
     }
 
     /**
-     * Update Cart Item Quantity (Increment/Decrement)
+     * Update Cart Item Quantity (increase/decrease)
      * POST /api/cart/quantity
      */
     public function updateQuantity(Request $request)
@@ -191,7 +191,7 @@ class CartApiController extends Controller
         try {
             $validated = $request->validate([
                 'cart_id' => 'required|integer|exists:cart,cart_id',
-                'action' => 'required|string|in:increment,decrement',
+                'action' => 'required|string|in:increase,decrease',
             ]);
 
             $user = $request->user();
@@ -227,7 +227,7 @@ class CartApiController extends Controller
                 return ApiResponseHelper::error('Product variation not found', 404);
             }
 
-            if ($action === 'increment') {
+            if ($action === 'increase') {
                 // Check stock: variation.qty must be greater than cart.qty
                 if ($variation->qty > $cartItem->qty) {
                     $cartItem->qty += 1;
@@ -241,7 +241,7 @@ class CartApiController extends Controller
                     return ApiResponseHelper::error('Quantity is not available at this moment!', 422);
                 }
             } else {
-                // action is decrement
+                // action is decrease
                 if ($cartItem->qty > 1) {
                     $cartItem->qty -= 1;
                     $cartItem->save();

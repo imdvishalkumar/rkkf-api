@@ -21,15 +21,37 @@ class BranchApiController extends Controller
     }
 
     /**
-     * List all active branches
+     * Get the branch for the currently logged-in user
      */
-    public function index()
+    public function index(Request $request)
     {
         try {
-            $branches = $this->branchService->getAllBranches();
+            $user = $request->user();
+
+            // Allow admins to see all branches if needed, or stick to the requirement.
+            // Requirement says: "return only the branch details based on the branch_id of the currently logged-in user"
+            // So we will strictly follow that.
+
+            // Check if user has a related student record
+            $student = $user->student;
+
+            if (!$student) {
+                return ApiResponseHelper::error('No student profile found for this user', 404);
+            }
+
+            if (!$student->branch_id) {
+                return ApiResponseHelper::error('No branch assigned to this student', 404);
+            }
+
+            $branch = $this->branchService->getBranchById($student->branch_id);
+
+            if (!$branch) {
+                return ApiResponseHelper::error('Branch not found', 404);
+            }
+
             return ApiResponseHelper::success(
-                BranchResource::collection($branches),
-                'Branches retrieved successfully'
+                new BranchResource($branch),
+                'Branch retrieved successfully'
             );
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), 500);

@@ -48,7 +48,7 @@ class AttendanceApiController extends Controller
             $students = DB::table('students as s')
                 ->join('branch as br', 's.branch_id', '=', 'br.branch_id')
                 ->where('s.branch_id', $branchId)
-                ->whereNotIn('s.student_id', function($query) {
+                ->whereNotIn('s.student_id', function ($query) {
                     $query->select('student_id')->from('fastrack');
                 })
                 ->select(
@@ -62,39 +62,6 @@ class AttendanceApiController extends Controller
                 ->get();
 
             return ApiResponseHelper::success($students, 'Students retrieved successfully');
-        } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
-        }
-    }
-
-    /**
-     * Get attendance by branch and date
-     * GET /api/attendance/get-attendance?branchId=1&date=2024-01-15
-     */
-    public function getAttendance(Request $request)
-    {
-        try {
-            $request->validate([
-                'branchId' => 'required|integer|exists:branch,branch_id',
-                'date' => 'required|date',
-            ]);
-
-            $branchId = $request->input('branchId');
-            $date = $request->input('date');
-
-            $attendance = DB::table('attendance as a')
-                ->join('students as s', 'a.student_id', '=', 's.student_id')
-                ->where('a.branch_id', $branchId)
-                ->where('a.date', $date)
-                ->where('s.active', 1)
-                ->select(
-                    'a.*',
-                    DB::raw('CONCAT(s.firstname, " ", s.lastname) as name'),
-                    DB::raw('(SELECT name FROM branch WHERE branch_id = a.branch_id) as branch_name')
-                )
-                ->get();
-
-            return ApiResponseHelper::success($attendance, 'Attendance retrieved successfully');
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
@@ -117,6 +84,7 @@ class AttendanceApiController extends Controller
             $branchId = $request->input('branchId');
             $date = $request->input('date');
             $attendanceData = $request->input('attendance');
+            $userId = $request->user()->user_id;
 
             DB::beginTransaction();
 
@@ -130,6 +98,8 @@ class AttendanceApiController extends Controller
                         ],
                         [
                             'attend' => $item['attend'],
+                            'user_id' => $userId,
+                            'is_additional' => 0,
                         ]
                     );
             }
@@ -181,39 +151,9 @@ class AttendanceApiController extends Controller
     }
 
     /**
-     * Get additional attendance by branch and date
-     * GET /api/attendance/additional/get-attendance?branchId=1&date=2024-01-15
-     */
-    public function getAdditionalAttendance(Request $request)
-    {
-        try {
-            $request->validate([
-                'branchId' => 'required|integer|exists:branch,branch_id',
-                'date' => 'required|date',
-            ]);
-
-            $branchId = $request->input('branchId');
-            $date = $request->input('date');
-
-            $attendance = DB::table('attendance as a')
-                ->join('students as s', 'a.student_id', '=', 's.student_id')
-                ->where('a.branch_id', $branchId)
-                ->where('a.date', $date)
-                ->where('a.is_additional', 1)
-                ->where('s.active', 1)
-                ->select('a.*', DB::raw('CONCAT(s.firstname, " ", s.lastname) as name'))
-                ->get();
-
-            return ApiResponseHelper::success($attendance, 'Additional attendance retrieved successfully');
-        } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
-        }
-    }
-
-    /**
      * Insert/Update additional attendance (POST)
      */
-    public function insertAdditionalAttendance(Request $request)
+    public function takeAdditionalAttendance(Request $request)
     {
         try {
             $request->validate([
@@ -280,8 +220,8 @@ class AttendanceApiController extends Controller
                 DB::raw('CONCAT(s.firstname, " ", s.lastname) as name'),
                 DB::raw('(SELECT name FROM branch WHERE branch_id = a.branch_id) as branch_name')
             )
-            ->orderBy('a.date', 'desc')
-            ->get();
+                ->orderBy('a.date', 'desc')
+                ->get();
 
             return ApiResponseHelper::success($attendance, 'Attendance log retrieved successfully');
         } catch (Exception $e) {
@@ -324,8 +264,8 @@ class AttendanceApiController extends Controller
                 DB::raw('(SELECT name FROM branch WHERE branch_id = a.branch_id) as branch_name'),
                 DB::raw('(SELECT CONCAT(firstname, " ", lastname) FROM users WHERE user_id = a.user_id) as ins_name')
             )
-            ->orderBy('a.date', 'desc')
-            ->get();
+                ->orderBy('a.date', 'desc')
+                ->get();
 
             return ApiResponseHelper::success($attendance, 'Attendance view retrieved successfully');
         } catch (Exception $e) {

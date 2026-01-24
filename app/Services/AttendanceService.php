@@ -196,6 +196,38 @@ class AttendanceService
             'records' => $attendanceRecords // Optional if needed for detailed view later
         ];
     }
+    /**
+     * Get total present days count for a student
+     */
+    public function getTotalPresentDays(int $studentId): int
+    {
+        return DB::table('attendance')
+            ->where('student_id', $studentId)
+            ->where('attend', 'P')
+            ->count();
+    }
+
+    /**
+     * Get fastrack attendance count for a student
+     */
+    public function getFastrackAttendanceCount(int $studentId): int
+    {
+        return DB::table('fastrack_attendance')
+            ->where('student_id', $studentId)
+            ->count();
+    }
+
+    /**
+     * Get total fastrack attendance records for a specific branch and belt
+     */
+    public function getBranchBeltFastrackCount(int $branchId, int $beltId): int
+    {
+        return DB::table('fastrack_attendance as fa')
+            ->join('students as s', 'fa.student_id', '=', 's.student_id')
+            ->where('fa.branch_id', $branchId)
+            ->where('s.belt_id', $beltId)
+            ->count();
+    }
 }
 
 

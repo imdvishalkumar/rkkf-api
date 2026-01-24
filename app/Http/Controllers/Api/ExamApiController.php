@@ -8,6 +8,7 @@ use App\Services\StudentService;
 use App\Helpers\ApiResponseHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Exception;
 
 class ExamApiController extends Controller
@@ -200,7 +201,13 @@ class ExamApiController extends Controller
     public function getProgress(Request $request)
     {
         try {
+            \Illuminate\Support\Facades\Log::info('Entering getProgress');
             $user = $request->user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('Unauthenticated', 401);
+            }
+
             $student = \App\Models\Student::where('email', $user->email)->first();
 
             if (!$student) {
@@ -362,7 +369,13 @@ class ExamApiController extends Controller
     public function getResultsOverview(Request $request)
     {
         try {
+            \Illuminate\Support\Facades\Log::info('Entering getResultsOverview');
             $user = $request->user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('Unauthenticated', 401);
+            }
+
             $student = \App\Models\Student::where('email', $user->email)->first();
 
             if (!$student) {
@@ -418,7 +431,13 @@ class ExamApiController extends Controller
     public function getResults(Request $request)
     {
         try {
+            \Illuminate\Support\Facades\Log::info('Entering getResults');
             $user = $request->user();
+
+            if (!$user) {
+                return ApiResponseHelper::error('Unauthenticated', 401);
+            }
+
             $student = \App\Models\Student::where('email', $user->email)->first();
 
             if (!$student) {
@@ -453,7 +472,7 @@ class ExamApiController extends Controller
                 'percentage' => $performancePercentage
             ];
 
-            // --- 2. Get All Exam Results with Details ---
+            // --- 2. Get All Exam Results with Details (using DISTINCT to prevent duplicates) ---
             $results = DB::table('exam_attendance as ea')
                 ->join('exam as e', 'ea.exam_id', '=', 'e.exam_id')
                 ->join('exam_fees as ef', function ($join) {
@@ -475,6 +494,7 @@ class ExamApiController extends Controller
                     'from_belt.name as from_belt',
                     'to_belt.name as to_belt'
                 ])
+                ->distinct()
                 ->orderBy('e.date', 'desc')
                 ->get();
 
@@ -488,7 +508,14 @@ class ExamApiController extends Controller
                     : 'Better Luck Next Time!';
 
                 if ($result->status === 'Pass' && $result->certificate_no) {
-                    $result->download_certificate_url = "/api/certificates/{$result->certificate_no}";
+                    // Generate signed URL valid for 24 hours for secure certificate download
+                    $result->download_certificate_url = \Illuminate\Support\Facades\URL::signedRoute(
+                        'api.exams.results.download',
+                        ['certificate_no' => $result->certificate_no],
+                        now()->addHours(24)
+                    );
+                } else {
+                    $result->download_certificate_url = null;
                 }
 
                 $result->belt_transition = [
@@ -507,6 +534,93 @@ class ExamApiController extends Controller
                 'performance_stats' => $performanceStats,
                 'results' => $formattedResults
             ], 'Exam results retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Download exam result certificate as PDF
+     * GET /api/exams/results/{certificate_no}/download
+     * 
+     * Generates and downloads a PDF certificate for the exam result
+     * This is a public endpoint - no authentication required
+     */
+    public function downloadResultCertificate(Request $request, string $certificateNo)
+    {
+        try {
+            \Illuminate\Support\Facades\Log::info('Entering downloadResultCertificate', ['cert' => $certificateNo]);
+
+            // Validate signed URL
+            if (!$request->hasValidSignature()) {
+                return ApiResponseHelper::error('Invalid or expired download link. Please request a new link from the results page.', 403);
+            }
+
+            // Get the exam result for this certificate (public access by certificate number)
+            $result = DB::table('exam_attendance as ea')
+                ->join('exam as e', 'ea.exam_id', '=', 'e.exam_id')
+                ->join('exam_fees as ef', function ($join) {
+                    $join->on('ef.exam_id', '=', 'ea.exam_id')
+                        ->on('ef.student_id', '=', 'ea.student_id');
+                })
+                ->leftJoin('belt as from_belt', 'ef.exam_belt_id', '=', DB::raw('from_belt.belt_id + 1'))
+                ->leftJoin('belt as to_belt', 'ef.exam_belt_id', '=', 'to_belt.belt_id')
+                ->where('ea.certificate_no', $certificateNo)
+                ->select([
+                    'ea.exam_attendance_id',
+                    'ea.exam_id',
+                    'e.name as exam_name',
+                    'e.date as exam_date',
+                    'e.location',
+                    'ea.attend',
+                    'ea.certificate_no',
+                    'from_belt.name as from_belt',
+                    'to_belt.name as to_belt'
+                ])
+                ->first();
+
+            if (!$result) {
+                return ApiResponseHelper::error('Certificate not found or access denied', 404);
+            }
+
+            // Prepare data for PDF
+            $status = $result->attend === 'P' ? 'Pass' : ($result->attend === 'F' ? 'Fail' : 'Special');
+            $isPassed = $status === 'Pass';
+
+            $pdfData = [
+                'exam_name' => $result->exam_name,
+                'exam_date' => $result->exam_date,
+                'location' => $result->location ?? 'N/A',
+                'attend' => $result->attend,
+                'certificate_no' => $result->certificate_no,
+                'status' => $status,
+                'is_passed' => $isPassed,
+                'remarks' => $isPassed ? 'Congratulations!' : 'Better Luck Next Time!',
+                'belt_transition' => [
+                    'from' => $result->from_belt ?? 'Unknown',
+                    'to' => $result->to_belt ?? 'Unknown'
+                ]
+            ];
+
+            // Generate PDF
+            $pdf = Pdf::loadView('pdf.exam-result-certificate', $pdfData);
+
+            // Set paper size and orientation
+            $pdf->setPaper('A4', 'portrait');
+
+            // Set options for better rendering
+            $pdf->setOptions([
+                'isHtml5ParserEnabled' => true,
+                'isRemoteEnabled' => true,
+                'defaultFont' => 'DejaVu Sans',
+            ]);
+
+            // Generate filename
+            $filename = "Exam_Result_{$certificateNo}.pdf";
+
+            // Return download response
+            return $pdf->download($filename);
 
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));

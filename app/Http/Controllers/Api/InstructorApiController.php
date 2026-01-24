@@ -11,6 +11,13 @@ use Exception;
 
 class InstructorApiController extends Controller
 {
+    protected $examService;
+
+    public function __construct(\App\Services\ExamService $examService)
+    {
+        $this->examService = $examService;
+    }
+
     /**
      * Get branch days
      * GET /api/instructor/branches/{id}/days
@@ -40,6 +47,50 @@ class InstructorApiController extends Controller
     }
 
     /**
+     * Get all branches
+     * GET /api/instructor/branches
+     */
+    public function getAllBranches()
+    {
+        try {
+            $branches = \App\Models\Branch::select('branch_id', 'name', 'days', 'address', 'city')
+                ->orderBy('name', 'asc')
+                ->get();
+
+            return ApiResponseHelper::success([
+                'data' => $branches,
+            ], 'Branches retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Insert exam attendance with certificate generation
+     * POST /api/instructor/exams/attendance
+     */
+    public function insertExamAttendance(\App\Http\Requests\Instructor\StoreExamAttendanceRequest $request)
+    {
+        try {
+            $user = Auth::user();
+            $examId = $request->input('exam_id');
+
+            $decodedArray = $request->getDecodedAttendanceArray();
+            if ($decodedArray === null) {
+                return ApiResponseHelper::error('Invalid attendance array format', 422);
+            }
+
+            $result = $this->examService->markAttendance($examId, $decodedArray, $user->user_id);
+
+            return ApiResponseHelper::success($result, $result['message']);
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
+
+    /**
      * Search students by name or GR number
      * GET /api/instructor/students/search?name=john
      */
@@ -49,18 +100,12 @@ class InstructorApiController extends Controller
             $name = $request->query('name', '');
             $name = trim($name);
 
-            $students = DB::table('students as s')
-                ->join('branch as br', 's.branch_id', '=', 'br.branch_id')
-                ->where('s.active', 1)
+            $students = \App\Models\Student::with(['branch', 'belt']) // Eager load relations
+                ->where('active', 1)
                 ->where(function ($query) use ($name) {
-                    $query->where('s.student_id', 'like', $name . '%')
-                        ->orWhere(DB::raw("CONCAT(s.firstname, ' ', s.lastname)"), 'like', '%' . $name . '%');
+                    $query->where('student_id', 'like', $name . '%')
+                        ->orWhere(DB::raw("CONCAT(firstname, ' ', lastname)"), 'like', '%' . $name . '%');
                 })
-                ->select(
-                    's.*',
-                    DB::raw("CONCAT(s.firstname, ' ', s.lastname) as name"),
-                    'br.name as branch_name'
-                )
                 ->limit(50)
                 ->get();
 
@@ -71,7 +116,7 @@ class InstructorApiController extends Controller
             }
 
             return ApiResponseHelper::success([
-                'data' => $students,
+                'data' => \App\Http\Resources\StudentResource::collection($students),
             ], 'Students retrieved successfully');
 
         } catch (Exception $e) {
@@ -367,111 +412,7 @@ class InstructorApiController extends Controller
      * Insert exam attendance with certificate generation
      * POST /api/instructor/exams/attendance
      */
-    public function insertExamAttendance(Request $request)
-    {
-        try {
-            $request->validate([
-                'exam_id' => 'required|integer',
-                'attendanceArray' => 'required|string',
-            ]);
 
-            $user = Auth::user();
-            $examId = $request->input('exam_id');
-            $attenArray = $request->input('attendanceArray');
-
-            // Check if attendance already exists
-            $existing = DB::table('exam_attendance')
-                ->where('exam_id', $examId)
-                ->exists();
-
-            if ($existing) {
-                return ApiResponseHelper::success([
-                    'saved' => 0,
-                ], 'Attendance already exists!');
-            }
-
-            $decodedArray = json_decode($attenArray, true);
-            $presentArr = [];
-            $absentArr = [];
-            $leaveArr = [];
-
-            foreach ($decodedArray as $value) {
-                if (isset($value['present_student_id'])) {
-                    $presentArr[] = $value['present_student_id'];
-                }
-                if (isset($value['absent_student_id'])) {
-                    $absentArr[] = $value['absent_student_id'];
-                }
-                if (isset($value['leave_student_id'])) {
-                    $leaveArr[] = $value['leave_student_id'];
-                }
-            }
-
-            // Insert present students with certificate
-            foreach ($presentArr as $studentId) {
-                $examData = DB::table('belt as b')
-                    ->join('exam as e', function ($join) use ($examId) {
-                        $join->where('e.exam_id', '=', $examId);
-                    })
-                    ->join('exam_fees as ef', function ($join) use ($examId, $studentId) {
-                        $join->where('ef.exam_id', '=', $examId)
-                            ->where('ef.student_id', '=', $studentId)
-                            ->where('ef.status', '=', 1);
-                    })
-                    ->where('ef.exam_belt_id', '=', DB::raw('b.belt_id'))
-                    ->select('b.code', 'e.date', 'ef.exam_belt_id')
-                    ->first();
-
-                $certificateNo = '';
-                if ($examData) {
-                    $date = str_replace('-', '', $examData->date);
-                    $certificateNo = $date . $examData->code . $studentId . $examData->exam_belt_id;
-
-                    // Update student belt
-                    DB::table('students')
-                        ->where('student_id', $studentId)
-                        ->update(['belt_id' => $examData->exam_belt_id]);
-                }
-
-                DB::table('exam_attendance')->insert([
-                    'exam_id' => $examId,
-                    'student_id' => $studentId,
-                    'attend' => 'P',
-                    'user_id' => $user->user_id,
-                    'certificate_no' => $certificateNo,
-                ]);
-            }
-
-            // Insert absent students
-            foreach ($absentArr as $studentId) {
-                DB::table('exam_attendance')->insert([
-                    'exam_id' => $examId,
-                    'student_id' => $studentId,
-                    'attend' => 'A',
-                    'user_id' => $user->user_id,
-                    'certificate_no' => '',
-                ]);
-            }
-
-            // Insert leave students
-            foreach ($leaveArr as $studentId) {
-                DB::table('exam_attendance')->insert([
-                    'exam_id' => $examId,
-                    'student_id' => $studentId,
-                    'attend' => 'F',
-                    'user_id' => $user->user_id,
-                    'certificate_no' => '',
-                ]);
-            }
-
-            return ApiResponseHelper::success([
-                'saved' => 1,
-            ], 'Attendance Submitted.');
-
-        } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), 500);
-        }
-    }
 
     /**
      * Get exam details with eligibility info

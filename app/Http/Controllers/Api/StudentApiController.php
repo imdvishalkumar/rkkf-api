@@ -258,20 +258,19 @@ class StudentApiController extends Controller
             $user = $request->user();
 
             // Get student associated with user
-            $student = \App\Models\Student::where('email', $user->email)->first();
+            $student = \App\Models\Student::with(['branch', 'belt'])->where('email', $user->email)->first();
 
             if (!$student) {
                 return ApiResponseHelper::error('Student profile not found', 404);
             }
 
-            // Add full URL for profile image
-            if ($student->profile_img && $student->profile_img !== 'default.png') {
-                $student->profile_img_url = Storage::disk('public')->url('profile_images/' . $student->profile_img);
-            } else {
-                $student->profile_img_url = asset('images/default-avatar.png');
-            }
 
-            return ApiResponseHelper::success($student, 'Profile retrieved successfully');
+
+            // Get fastrack attendance counts
+            $student->my_fastrack_attendance = $this->attendanceService->getFastrackAttendanceCount($student->student_id);
+            $student->total_fastrack_records = $this->attendanceService->getBranchBeltFastrackCount((int) $student->branch_id, (int) $student->belt_id);
+
+            return ApiResponseHelper::success(new \App\Http\Resources\StudentResource($student), 'Profile retrieved successfully');
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
@@ -318,15 +317,7 @@ class StudentApiController extends Controller
             // Get updated student with fresh data
             $student->refresh();
 
-            // Add full URL for profile image
-            if ($student->profile_img && $student->profile_img !== 'default.png') {
-                $student->profile_img_url = Storage::disk('public')->url('profile_images/' . $student->profile_img);
-            } else {
-                // Fallback to default if needed
-                $student->profile_img_url = asset('images/default-avatar.png');
-            }
-
-            return ApiResponseHelper::success($student, 'Profile updated successfully');
+            return ApiResponseHelper::success(new \App\Http\Resources\StudentResource($student), 'Profile updated successfully');
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }

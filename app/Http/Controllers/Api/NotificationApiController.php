@@ -31,33 +31,34 @@ class NotificationApiController extends Controller
             }
 
             $studentId = $student->student_id;
-            $filter = $request->query('filter', 'all');
+            $search = $request->query('search', 'all');
 
             $query = DB::table('notification')
                 ->where('student_id', $studentId)
                 ->orderBy('timestamp', 'desc');
 
-            // Apply filters
-            switch ($filter) {
-                case 'unread':
-                    $query->where('viewed', 0);
-                    break;
-                case 'exams':
-                case 'exam': // handle singular too just in case
-                    $query->where('type', 'Exam');
-                    break;
-                case 'event':
-                case 'events':
-                    $query->where('type', 'Event');
-                    break;
-                case 'fees':
-                case 'fee':
-                    $query->where('type', 'Fees'); // Assuming type is 'Fees' based on typical naming
-                    break;
-                case 'all':
-                default:
-                    // No additional filter
-                    break;
+            // Fetch unique types for filtering
+            $typesFromDb = DB::table('notification')
+                ->where('student_id', $studentId)
+                ->whereNotNull('type')
+                ->distinct()
+                ->pluck('type')
+                ->toArray();
+
+            $notificationTypesFromDb = array_merge(['all'], $typesFromDb);
+            $notificationTypes = collect($notificationTypesFromDb)->map(function ($type) {
+                return [
+                    'type' => $type,
+                    'icon' => $this->getNotificationIcon($type)
+                ];
+            });
+
+            // Apply search
+            if ($search === 'unread') {
+                $query->where('viewed', 0);
+            } elseif ($search !== 'all') {
+                // Dynamic search: search by the provided type
+                $query->where('type', $search);
             }
 
             $notifications = $query->get()->map(function ($item) {
@@ -66,6 +67,7 @@ class NotificationApiController extends Controller
                     'title' => $item->title,
                     'details' => $item->details,
                     'type' => $item->type,
+                    'icon' => $this->getNotificationIcon($item->type),
                     'is_read' => $item->viewed == 1,
                     // Format relative time if needed, or just send date
                     'date' => date('Y-m-d', strtotime($item->timestamp)),
@@ -76,11 +78,29 @@ class NotificationApiController extends Controller
 
             return ApiResponseHelper::success([
                 'data' => $notifications,
-                'count' => $notifications->count()
+                'count' => $notifications->count(),
+                'notification_types' => $notificationTypes
             ], 'Notifications retrieved successfully');
 
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), 500);
         }
+    }
+
+    /**
+     * Get icon URL for a notification type
+     */
+    private function getNotificationIcon($type)
+    {
+        $type = strtolower($type);
+        $iconMap = [
+            'event' => 'ic_event.svg',
+            'exam' => 'ic_examnot.svg',
+            'fees' => 'ic_fees_reminder.svg',
+        ];
+
+        $icon = $iconMap[$type] ?? 'ic_general.svg';
+        $baseUrl = url('images/notifications') . '/';
+        return $baseUrl . $icon;
     }
 }

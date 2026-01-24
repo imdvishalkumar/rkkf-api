@@ -9,6 +9,8 @@ class Variation extends Model
 {
     protected $table = 'variation';
     protected $primaryKey = 'id';
+
+    protected $hidden = ['created_at', 'updated_at'];
     public $incrementing = true;
 
     protected $fillable = [

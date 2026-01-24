@@ -4,44 +4,23 @@ namespace App\Enums;
 
 enum AttendanceStatus: string
 {
-    case PRESENT = 'P';
-    case ABSENT = 'A';
-    case LEAVE = 'L';
+    case Present = 'P';
+    case Absent = 'A';
+    case Leave = 'L';
+    case Fail = 'F';
+    case Event = 'E';
 
+    /**
+     * Get human-readable label
+     */
     public function label(): string
     {
-        return match($this) {
-            self::PRESENT => 'Present',
-            self::ABSENT => 'Absent',
-            self::LEAVE => 'Leave',
+        return match ($this) {
+            self::Present => 'Present',
+            self::Absent => 'Absent',
+            self::Leave => 'On Leave',
+            self::Fail => 'Failed',
+            self::Event => 'Event',
         };
     }
-
-    public function isPresent(): bool
-    {
-        return $this === self::PRESENT;
-    }
-
-    public function isAbsent(): bool
-    {
-        return $this === self::ABSENT;
-    }
-
-    public function isLeave(): bool
-    {
-        return $this === self::LEAVE;
-    }
-
-    public static function values(): array
-    {
-        return array_column(self::cases(), 'value');
-    }
-
-    public static function fromValue(string $value): ?self
-    {
-        return self::tryFrom($value);
-    }
 }
-
-
-
