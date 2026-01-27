@@ -659,6 +659,7 @@ class FeeApiController extends Controller
             }
 
             return ApiResponseHelper::success([
+                'last_paid' => $result['last_paid'] ?? null,
                 'upcoming_payment' => $result['upcoming_payment'],
                 'payment_options' => $result['payment_options'],
                 'student' => $result['student'],
@@ -714,6 +715,108 @@ class FeeApiController extends Controller
                 'payments' => $result['payments'],
                 'pagination' => $result['pagination'],
             ], 'Payment history retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+    /**
+     * Download Invoice (PDF)
+     * GET /api/fees/invoice/{id}/download?type=online|manual
+     */
+    public function downloadInvoice(Request $request, $id)
+    {
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return ApiResponseHelper::error('User not authenticated', 401);
+            }
+
+            $type = $request->input('type', 'online');
+
+            $data = [];
+
+            // Helper function to map month numbers to names
+            $getMonthNames = function ($monthsStr) {
+                if (!$monthsStr)
+                    return '';
+                $monthsMap = [
+                    1 => 'JAN',
+                    2 => 'FEB',
+                    3 => 'MAR',
+                    4 => 'APR',
+                    5 => 'MAY',
+                    6 => 'JUN',
+                    7 => 'JUL',
+                    8 => 'AUG',
+                    9 => 'SEP',
+                    10 => 'OCT',
+                    11 => 'NOV',
+                    12 => 'DEC'
+                ];
+                $parts = is_array($monthsStr) ? $monthsStr : explode(',', $monthsStr);
+                $names = [];
+                foreach ($parts as $m) {
+                    $names[] = $monthsMap[(int) $m] ?? '';
+                }
+                return implode(' ', $names);
+            };
+
+            if ($type === 'online') {
+                $transaction = \App\Models\Transaction::with(['student.branch', 'student.belt'])->find($id);
+
+                if (!$transaction) {
+                    return ApiResponseHelper::error('Transaction not found', 404);
+                }
+
+                // Verify ownership: Authentication user's student should match transaction student
+                // Note: user->student might be null if admin, but here assume student context
+                $student = $user->student;
+                if ($student && $student->student_id !== $transaction->student_id) {
+                    return ApiResponseHelper::error('Unauthorized access to this invoice', 403);
+                }
+
+                $data = [
+                    'student' => $transaction->student,
+                    'receipt_no' => $transaction->transcation_id,
+                    'date' => $transaction->date ? $transaction->date->format('d-m-Y') : 'N/A',
+                    'amount' => $transaction->amount,
+                    'payment_mode' => 'Online (' . $transaction->type . ')',
+                    'transaction_ref' => $transaction->order_id,
+                    'months_display' => $getMonthNames($transaction->months) . ' ' . $transaction->year,
+                ];
+
+            } else { // manual
+                $fee = \App\Models\Fee::with(['student.branch', 'student.belt'])->find($id);
+
+                if (!$fee) {
+                    return ApiResponseHelper::error('Fee record not found', 404);
+                }
+
+                // Verify ownership
+                $student = $user->student;
+                if ($student && $student->student_id !== $fee->student_id) {
+                    return ApiResponseHelper::error('Unauthorized access to this invoice', 403);
+                }
+
+                $data = [
+                    'student' => $fee->student,
+                    'receipt_no' => 'M-' . $fee->fee_id,
+                    'date' => $fee->date ? $fee->date->format('d-m-Y') : 'N/A',
+                    'amount' => $fee->amount,
+                    'payment_mode' => $fee->mode ?: 'Cash',
+                    'transaction_ref' => 'Manual Entry',
+                    'months_display' => $getMonthNames([$fee->months]) . ' ' . $fee->year,
+                ];
+            }
+
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.fee_receipt', $data);
+
+            // Generate a filename
+            $filename = 'invoice_' . $id . '.pdf';
+
+            // Return download response
+            return $pdf->download($filename);
 
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));

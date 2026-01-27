@@ -219,4 +219,156 @@ class OrderApiController extends Controller
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
         }
     }
+    /**
+     * Create orders from cart (Place Order)
+     * POST /api/orders/create
+     * 
+     * This creates orders for ALL items in the student's cart.
+     * After successful order creation, cart items are removed.
+     * 
+     * Request body:
+     * - coupon_id: int (optional, coupon to apply)
+     * - rp_order_id: string (optional, Razorpay order ID if online payment)
+     * - payment_mode: string (optional, 'online' or 'cod', default: 'cod')
+     */
+    public function store(Request $request)
+    {
+        try {
+            $user = $request->user();
+            if (!$user || !$user->student) {
+                return ApiResponseHelper::error('Student record not found for this user', 404);
+            }
+
+            $studentId = $user->student->student_id;
+
+            $request->validate([
+                'coupon_id' => 'nullable|integer|exists:coupon,coupon_id',
+                'rp_order_id' => 'nullable|string|max:255',
+                'payment_mode' => 'nullable|string|in:online,cod',
+            ]);
+
+            // Get cart items for this student
+            $cartItems = \App\Models\Cart::with(['product', 'variation'])
+                ->where('student_id', $studentId)
+                ->get();
+
+            if ($cartItems->isEmpty()) {
+                return ApiResponseHelper::error('Cart is empty. Add items to cart before placing order.', 422);
+            }
+
+            $paymentMode = $request->input('payment_mode', 'cod');
+            $rpOrderId = $request->input('rp_order_id');
+            $couponId = $request->input('coupon_id');
+
+            // Calculate totals
+            $subtotal = 0;
+            $orderItems = [];
+
+            foreach ($cartItems as $cartItem) {
+                // Use variation price if available, else product price
+                $unitPrice = $cartItem->variation->price ?? $cartItem->product->price ?? 0;
+                $itemTotal = $unitPrice * $cartItem->qty;
+                $subtotal += $itemTotal;
+
+                $orderItems[] = [
+                    'cart_id' => $cartItem->cart_id,
+                    'product_id' => $cartItem->product_id,
+                    'variation_id' => $cartItem->variation_id,
+                    'name_var' => $cartItem->variation->variation ?? null,
+                    'qty' => $cartItem->qty,
+                    'unit_price' => $unitPrice,
+                    'item_total' => $itemTotal,
+                ];
+            }
+
+            // Apply coupon discount if provided
+            $discount = 0;
+            $coupon = null;
+            if ($couponId) {
+                $coupon = \App\Models\Coupon::where('coupon_id', $couponId)
+                    ->where('used', 0)
+                    ->first();
+
+                if ($coupon) {
+                    $discount = $coupon->amount;
+                } else {
+                    return ApiResponseHelper::error('Coupon is invalid or already used.', 422);
+                }
+            }
+
+            $grandTotal = max(0, $subtotal - $discount);
+
+            // Determine order status based on payment mode
+            // 0 = Pending (online payment not yet verified)
+            // 1 = Confirmed (COD or payment verified)
+            $orderStatus = ($paymentMode === 'online' && $rpOrderId) ? 0 : 1;
+
+            DB::beginTransaction();
+
+            try {
+                $createdOrders = [];
+
+                // Create order for each cart item
+                foreach ($orderItems as $item) {
+                    $order = \App\Models\Order::create([
+                        'student_id' => $studentId,
+                        'product_id' => $item['product_id'],
+                        'variation_id' => $item['variation_id'] ?? 0,
+                        'name_var' => $item['name_var'] ?? '',
+                        'qty' => $item['qty'],
+                        'p_price' => $item['item_total'],
+                        'status' => $orderStatus,
+                        'viewed' => 0,
+                        'date' => now()->toDateString(),
+                        'rp_order_id' => $rpOrderId ?? '',
+                        'flag_delivered' => 0,
+                        'counter' => 0,
+                        'flag' => 0,
+                    ]);
+
+                    $createdOrders[] = [
+                        'order_id' => $order->order_id,
+                        'product_id' => $item['product_id'],
+                        'qty' => $item['qty'],
+                        'price' => $item['item_total'],
+                    ];
+
+                    // Reduce stock from variation
+                    if ($item['variation_id']) {
+                        \App\Models\Variation::where('id', $item['variation_id'])
+                            ->decrement('qty', $item['qty']);
+                    }
+                }
+
+                // Mark coupon as used
+                if ($coupon) {
+                    $coupon->used = 1;
+                    $coupon->save();
+                }
+
+                // Clear cart items for this student
+                \App\Models\Cart::where('student_id', $studentId)->delete();
+
+                DB::commit();
+
+                return ApiResponseHelper::success([
+                    'orders' => $createdOrders,
+                    'order_count' => count($createdOrders),
+                    'subtotal' => round($subtotal, 2),
+                    'discount' => round($discount, 2),
+                    'grand_total' => round($grandTotal, 2),
+                    'payment_mode' => $paymentMode,
+                    'status' => $orderStatus ? 'Confirmed' : 'Pending Payment',
+                    'rp_order_id' => $rpOrderId,
+                ], 'Order placed successfully! Cart has been cleared.', 201);
+
+            } catch (Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
 }

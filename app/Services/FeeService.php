@@ -835,6 +835,15 @@ class FeeService
                 'due_year' => $year,
                 'due_months_display' => $upcomingMonthsStr . ' ' . $year,
             ],
+            'last_paid' => [
+                'fee_id' => $lastPaidFee->fee_id,
+                'amount' => $lastPaidFee->amount,
+                'date' => $lastPaidFee->date ? $lastPaidFee->date->format('Y-m-d') : null,
+                'months' => $lastPaidFee->months,
+                'year' => $lastPaidFee->year,
+                'mode' => $lastPaidFee->mode,
+                'display_text' => $this->getMonthName((int) $lastPaidFee->months) . ' ' . $lastPaidFee->year
+            ],
             'payment_options' => $paymentOptions,
             'student' => [
                 'name' => $student->firstname . ' ' . $student->lastname,
@@ -852,94 +861,171 @@ class FeeService
      * @param int $perPage
      * @return array
      */
+    /**
+     * Get payment history for a student (for Payment History screen).
+     * Includes both online (Transaction) and manual (Fee) records.
+     *
+     * @param int $studentId
+     * @param string|null $startDate
+     * @param string|null $endDate
+     * @param int $perPage
+     * @return array
+     */
     public function getPaymentHistory(int $studentId, ?string $startDate = null, ?string $endDate = null, int $perPage = 15): array
     {
-        $query = Fee::where('student_id', $studentId)
-            ->orderBy('date', 'desc')
-            ->orderBy('year', 'desc')
-            ->orderBy('months', 'desc');
+        // 1. Fetch Online Transactions (Success, Failed, Pending)
+        $transactionQuery = \App\Models\Transaction::where('student_id', $studentId)
+            ->where('type', 'fees')
+            ->orderBy('date', 'desc');
 
         if ($startDate) {
-            $query->where('date', '>=', $startDate);
+            $transactionQuery->where('date', '>=', $startDate);
         }
 
         if ($endDate) {
-            $query->where('date', '<=', $endDate);
+            $transactionQuery->where('date', '<=', $endDate);
         }
 
-        $fees = $query->paginate($perPage);
+        $transactions = $transactionQuery->get();
 
-        // Group fees by mode (transaction ID) to combine multi-month payments
-        $groupedPayments = [];
+        // 2. Fetch Manual/Cash Fees (Exclude order_%)
+        $feeQuery = Fee::where('student_id', $studentId)
+            ->where(function ($q) {
+                $q->whereNull('mode')
+                    ->orWhere('mode', 'not like', 'order_%');
+            })
+            ->orderBy('date', 'desc');
 
-        foreach ($fees as $fee) {
-            $key = $fee->mode ?: 'cash_' . $fee->fee_id;
+        if ($startDate) {
+            $feeQuery->where('date', '>=', $startDate);
+        }
 
-            if (!isset($groupedPayments[$key])) {
-                // Try to get transaction info if mode looks like a Razorpay order ID
-                $transaction = null;
-                $status = 'Success';
-                $statusCode = 1;
+        if ($endDate) {
+            $feeQuery->where('date', '<=', $endDate);
+        }
 
-                if (str_starts_with($fee->mode ?? '', 'order_')) {
-                    $transaction = DB::table('transcation')
-                        ->where('order_id', $fee->mode)
-                        ->first();
+        $fees = $feeQuery->get();
 
-                    if ($transaction) {
-                        $statusCode = $transaction->status;
-                        $status = $statusCode == 1 ? 'Success' : ($statusCode == -1 ? 'Failed' : 'Pending');
-                    }
-                }
+        // 3. Process and Merge Data
+        $mergedHistory = [];
 
-                $groupedPayments[$key] = [
-                    'id' => $fee->fee_id,
-                    'status' => $status,
-                    'status_code' => $statusCode,
-                    'amount' => (float) $fee->amount,
-                    'months' => [(int) $fee->months],
-                    'year' => $fee->year,
-                    'payment_mode' => str_starts_with($fee->mode ?? '', 'order_') ? 'Online' : 'Cash',
-                    'transaction_id' => $fee->mode,
-                    'date' => $fee->date ? $fee->date->format('Y-m-d') : null,
-                    'receipt_url' => null,
-                ];
-            } else {
-                // Combine months and amounts for same transaction
-                $groupedPayments[$key]['months'][] = (int) $fee->months;
-                $groupedPayments[$key]['amount'] += (float) $fee->amount;
+        // Process Transactions
+        foreach ($transactions as $txn) {
+            $statusCode = $txn->status;
+            $status = match ($statusCode) {
+                1 => 'Success',
+                -1 => 'Failed',
+                default => 'Pending',
+            };
+
+            $monthNames = [];
+            if ($txn->months) {
+                $monthNums = explode(',', $txn->months);
+                sort($monthNums);
+                $monthNames = array_map(fn($m) => $this->getMonthName((int) $m), $monthNums);
             }
-        }
 
-        // Format the payments
-        $formattedPayments = [];
-        foreach ($groupedPayments as $payment) {
-            sort($payment['months']);
-            $monthNames = array_map(fn($m) => $this->getMonthName($m), $payment['months']);
-
-            $formattedPayments[] = [
-                'id' => $payment['id'],
-                'status' => $payment['status'],
-                'status_code' => $payment['status_code'],
-                'amount' => round($payment['amount'], 2),
-                'months_display' => implode(' ', $monthNames),
-                'year' => $payment['year'],
-                'duration' => count($payment['months']) . ' month' . (count($payment['months']) > 1 ? 's' : ''),
-                'payment_mode' => $payment['payment_mode'],
-                'transaction_id' => $payment['transaction_id'],
-                'date' => $payment['date'],
-                'receipt_url' => $payment['receipt_url'],
+            $mergedHistory[] = [
+                'id' => $txn->transcation_id,
+                'type' => 'online',
+                'status' => $status,
+                'status_code' => $statusCode,
+                'amount' => round((float) $txn->amount, 2),
+                'title' => implode(' ', $monthNames) . ' ' . $txn->year,
+                'subtitle' => count($monthNames) . ' month' . (count($monthNames) !== 1 ? 's' : ''),
+                'payment_mode' => 'Online',
+                'reference_id' => $txn->order_id,
+                'description' => 'Online • ' . ($txn->order_id ?: 'TXN' . str_pad($txn->transcation_id, 8, '0', STR_PAD_LEFT)),
+                'date' => $txn->date ? $txn->date->format('Y-m-d') : null,
+                'download_invoice_url' => route('api.fees.invoice.download', ['id' => $txn->transcation_id, 'type' => 'online']),
+                'timestamp' => $txn->date ? $txn->date->timestamp : 0,
             ];
         }
 
+        // Group Manual Fees by Date + Mode (to simulate transactions)
+        $groupedFees = [];
+        foreach ($fees as $fee) {
+            // Group key: Date + Mode. If mode is empty, assume 'Cash'.
+            $dateStr = $fee->date ? $fee->date->format('Y-m-d') : 'unknown';
+            $modeStr = $fee->mode ?: 'Cash';
+            $key = $dateStr . '_' . $modeStr;
+
+            if (!isset($groupedFees[$key])) {
+                $groupedFees[$key] = [
+                    'id' => $fee->fee_id,
+                    'amount' => 0,
+                    'months' => [],
+                    'year' => $fee->year,
+                    'date' => $fee->date,
+                    'mode' => $modeStr,
+                ];
+            }
+
+            $groupedFees[$key]['amount'] += $fee->amount;
+            $groupedFees[$key]['months'][] = $fee->months;
+        }
+
+        // Process Grouped Manual Fees
+        foreach ($groupedFees as $group) {
+            $monthNums = $group['months'];
+            sort($monthNums);
+            $monthNames = array_map(fn($m) => $this->getMonthName((int) $m), $monthNums);
+
+            // Determine payment mode label and reference ID
+            $modeLabel = match (strtolower($group['mode'])) {
+                'cash' => 'Cash',
+                'upi' => 'UPI',
+                'cheque' => 'Cheque',
+                'bank', 'neft', 'rtgs', 'imps' => 'Bank Transfer',
+                default => 'Manual',
+            };
+
+            // Reference ID: use transaction reference or receipt number
+            $receiptNumber = 'REC' . str_pad($group['id'], 8, '0', STR_PAD_LEFT);
+            $referenceId = $group['mode'] && strtolower($group['mode']) !== 'cash'
+                ? strtoupper($group['mode'])
+                : $receiptNumber;
+
+            $mergedHistory[] = [
+                'id' => $group['id'],
+                // 'type' => 'manual',
+                'status' => 'Success',
+                'status_code' => 1,
+                'amount' => round((float) $group['amount'], 2),
+                'title' => implode(' ', $monthNames) . ' ' . $group['year'],
+                'subtitle' => count($monthNums) . ' month' . (count($monthNums) !== 1 ? 's' : ''),
+                'payment_mode' => $modeLabel,
+                // 'reference_id' => $referenceId,
+                'description' => $modeLabel . ' • ' . $referenceId,
+                'date' => $group['date'] ? $group['date']->format('Y-m-d') : null,
+                'download_invoice_url' => route('api.fees.invoice.download', ['id' => $group['id'], 'type' => 'manual']),
+                'timestamp' => $group['date'] ? $group['date']->timestamp : 0,
+            ];
+        }
+
+        // 4. Sort by Date Descending
+        usort($mergedHistory, function ($a, $b) {
+            // Sort by date (timestamp) desc
+            if ($a['timestamp'] === $b['timestamp']) {
+                return 0;
+            }
+            return ($a['timestamp'] > $b['timestamp']) ? -1 : 1;
+        });
+
+        // 5. Manual Pagination
+        $total = count($mergedHistory);
+        $currentPage = \Illuminate\Pagination\Paginator::resolveCurrentPage() ?: 1;
+        $offset = ($currentPage - 1) * $perPage;
+        $items = array_slice($mergedHistory, $offset, $perPage);
+
         return [
             'success' => true,
-            'payments' => $formattedPayments,
+            'payments' => $items,
             'pagination' => [
-                'current_page' => $fees->currentPage(),
-                'per_page' => $fees->perPage(),
-                'total' => $fees->total(),
-                'last_page' => $fees->lastPage(),
+                'current_page' => $currentPage,
+                'per_page' => $perPage,
+                'total' => $total,
+                'last_page' => max(1, ceil($total / $perPage)),
             ],
         ];
     }

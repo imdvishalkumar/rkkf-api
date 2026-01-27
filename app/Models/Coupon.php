@@ -10,6 +10,7 @@ class Coupon extends Model
     protected $table = 'coupon';
     protected $primaryKey = 'coupon_id';
     public $incrementing = true;
+    public $timestamps = false;
 
     protected $fillable = [
         'coupon_txt',

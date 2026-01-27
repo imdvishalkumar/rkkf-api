@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\EventCommentController;
 use App\Http\Controllers\Api\CategoryApiController;
 use App\Http\Controllers\Api\NotificationApiController;
 use App\Http\Controllers\Api\LeaveApiController;
+use App\Http\Controllers\Api\GuideCurriculumApiController;
 use App\Http\Controllers\Api\AdminAPI\SuperAdminController;
 use App\Http\Controllers\Api\AdminAPI\UserManagementController;
 use App\Http\Controllers\Api\AdminAPI\InstructorManagementController;
@@ -93,6 +94,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('users', UserManagementController::class)->parameters(['users' => 'id']);
         Route::apiResource('instructors', InstructorManagementController::class)->parameters(['instructors' => 'id']);
         Route::apiResource('branches', BranchApiController::class)->parameters(['branches' => 'id']); // Added
+        Route::apiResource('coupons', CouponApiController::class)->parameters(['coupons' => 'coupon_id']);
         Route::get('belts', [BeltApiController::class, 'index']);
     });
 
@@ -151,7 +153,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Coupon Validation
-    Route::get('coupons/validate', [CouponApiController::class, 'validate']);
+    Route::post('coupons/apply', [CouponApiController::class, 'apply']);
 
     // File Upload
     Route::post('upload', [FileUploadController::class, 'upload']);
@@ -159,8 +161,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('events')->group(function () {
         Route::get('/', [EventApiController::class, 'index']);
         Route::get('upcoming', [EventApiController::class, 'upcoming']);
-        Route::get('current', [EventApiController::class, 'getCurrentEvents']);
-        Route::get('past', [EventApiController::class, 'getPastEvents']);
+        Route::get('participated', [EventApiController::class, 'getParticipatedEvents']);
         Route::post('/', [EventApiController::class, 'store']);
         Route::get('/details/{id}', [EventApiController::class, 'show']);
         Route::put('{id}', [EventApiController::class, 'update']);
@@ -186,7 +187,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('comments/{comment_id}/like', [EventCommentController::class, 'toggleLike']);
 
     Route::prefix('products')->group(function () {
-        Route::get('list', [ProductApiController::class, 'TTT']);
+        Route::get('list', [ProductApiController::class, 'getProductList']);
         Route::post('store', [ProductApiController::class, 'store']);
         Route::get('{product_id}', [ProductApiController::class, 'show']);
         Route::get('show/{product_id}', [ProductApiController::class, 'productDetails']);
@@ -222,6 +223,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Payment flow
         Route::post('payment/initiate', [FeeApiController::class, 'initiatePayment']);
         Route::post('payment/verify', [FeeApiController::class, 'verifyPayment']);
+        Route::get('invoice/{id}/download', [FeeApiController::class, 'downloadInvoice'])->name('api.fees.invoice.download');
     });
 
     Route::prefix('orders')->group(function () {
@@ -232,6 +234,7 @@ Route::middleware('auth:sanctum')->group(function () {
         // Delete product route was inside OrderController? Keeping it if legacy requires.
         Route::post('delete-product', [OrderApiController::class, 'deleteProduct']);
         Route::post('review', [OrderApiController::class, 'submitReview']);
+        Route::post('create', [OrderApiController::class, 'store']); // Create new order
     });
 
     // Leave Management APIs
@@ -246,6 +249,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Contact Info API
     Route::get('contact-info', [ContactInfoController::class, 'index']);
     Route::post('contact-info', [ContactInfoController::class, 'store']);
+
+    // Guide Curriculum API
+    Route::get('guide-curriculum', [GuideCurriculumApiController::class, 'index']);
+    Route::get('guide-curriculum/{id}/download', [GuideCurriculumApiController::class, 'download'])
+        ->name('api.guide-curriculum.download');
 
 });
 
