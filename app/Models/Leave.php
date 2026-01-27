@@ -22,6 +22,7 @@ class Leave extends Model
         'from_date',
         'to_date',
         'reason',
+        'subject',
         'status',
         'applied_at',
         'reviewed_by',

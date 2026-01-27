@@ -335,11 +335,12 @@ class StudentApiController extends Controller
                 'to_date' => 'nullable|date|after_or_equal:from_date',
             ]);
 
-            // Securely get student from authenticated user
-            $student = $request->user()->student;
+            // Securely get student from authenticated user by matching email
+            $user = $request->user();
+            $student = \App\Models\Student::where('email', $user->email)->first();
 
             if (!$student) {
-                return ApiResponseHelper::error('Student profile not associated with this user', 404);
+                return ApiResponseHelper::error('Student profile not found for this user', 404);
             }
 
             // Determine date range (default to current month if not provided)
@@ -360,7 +361,8 @@ class StudentApiController extends Controller
                     'from' => $startDate,
                     'to' => $endDate
                 ],
-                'overview' => $data['overview']
+                'overview' => $data['overview'],
+                'last_paid' => $data['last_paid']
             ];
 
             return ApiResponseHelper::success($response, 'Attendance overview retrieved successfully');

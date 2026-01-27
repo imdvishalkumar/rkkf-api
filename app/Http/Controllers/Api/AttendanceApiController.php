@@ -38,9 +38,13 @@ class AttendanceApiController extends Controller
     public function getStudents(Request $request)
     {
         try {
-            $request->validate([
+            $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
                 'branchId' => 'required|integer|exists:branch,branch_id',
             ]);
+
+            if ($validator->fails()) {
+                return ApiResponseHelper::error($validator->errors()->first(), 200);
+            }
 
             $branchId = $request->input('branchId');
 
@@ -63,7 +67,7 @@ class AttendanceApiController extends Controller
 
             return ApiResponseHelper::success($students, 'Students retrieved successfully');
         } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+            return ApiResponseHelper::error($e->getMessage(), 200);
         }
     }
 

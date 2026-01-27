@@ -183,6 +183,36 @@ class AttendanceService
         $absentPercentage = $totalDays > 0 ? round(($absent / $totalDays) * 100, 2) : 0;
         $leavePercentage = $totalDays > 0 ? round(($leave / $totalDays) * 100, 2) : 0;
 
+        // Get last paid fee info with student details for GR No calculation
+        $lastPaidRecord = DB::table('fees')
+            ->join('students', 'fees.student_id', '=', 'students.student_id')
+            ->where('fees.student_id', $studentId)
+            ->orderBy('fees.date', 'desc')
+            ->select('fees.*', 'students.doj')
+            ->first();
+
+        $lastPaid = null;
+        if ($lastPaidRecord) {
+            // Calculate GR No
+            $year = $lastPaidRecord->doj ? date('Y', strtotime($lastPaidRecord->doj)) : date('Y');
+            $grNo = "STU-{$year}-{$studentId}";
+
+            // Determine Payment Status
+            $status = 'Paid';
+            if (isset($lastPaidRecord->disabled) && $lastPaidRecord->disabled == 1) {
+                $status = 'Cancelled';
+            }
+
+            $lastPaid = [
+                'fee_id' => $lastPaidRecord->fee_id,
+                'paid_date' => $lastPaidRecord->date,
+                'amount' => $lastPaidRecord->amount,
+                'mode' => $lastPaidRecord->mode,
+                'gr_no' => $grNo,
+                'payment_status' => $status,
+            ];
+        }
+
         return [
             'overview' => [
                 'present' => $present,
@@ -191,8 +221,9 @@ class AttendanceService
                 'total_days' => $totalDays,
                 'percentage' => $percentage,
                 'absent_percentage' => $absentPercentage,
-                'leave_percentage' => $leavePercentage
+                'leave_percentage' => $leavePercentage,
             ],
+            'last_paid' => $lastPaid,
             'records' => $attendanceRecords // Optional if needed for detailed view later
         ];
     }

@@ -55,6 +55,7 @@ class LeaveService
             $leave->from_date = $fromDate->format('Y-m-d');
             $leave->to_date = $toDate->format('Y-m-d');
             $leave->reason = $data['reason'];
+            $leave->subject = $data['subject'] ?? null;
             $leave->status = Leave::STATUS_PENDING;
             $leave->applied_at = now();
             $leave->save();
@@ -100,9 +101,8 @@ class LeaveService
                 'id' => $leave->leave_id,
                 'from_date' => $leave->from_date ? $leave->from_date->format('Y-m-d') : null,
                 'to_date' => $leave->to_date ? $leave->to_date->format('Y-m-d') : null,
-                'from_date_display' => $leave->from_date ? $leave->from_date->format('d-m-Y') : null,
-                'to_date_display' => $leave->to_date ? $leave->to_date->format('d-m-Y') : null,
                 'leave_days' => $leave->leave_days,
+                'subject' => $leave->subject,
                 'reason' => $leave->reason,
                 'status' => $leave->status_label,
                 'status_code' => $leave->status,

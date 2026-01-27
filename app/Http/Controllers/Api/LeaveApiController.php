@@ -42,12 +42,14 @@ class LeaveApiController extends Controller
             $request->validate([
                 'from_date' => 'required|date',
                 'to_date' => 'required|date|after_or_equal:from_date',
+                'subject' => 'required|string|max:255',
                 'reason' => 'required|string|max:500',
             ]);
 
             $result = $this->leaveService->applyLeave($student->student_id, [
                 'from_date' => $request->input('from_date'),
                 'to_date' => $request->input('to_date'),
+                'subject' => $request->input('subject'),
                 'reason' => $request->input('reason'),
             ]);
 

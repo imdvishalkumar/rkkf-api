@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\CouponApiController;
 use App\Http\Controllers\Api\FileUploadController;
 use App\Http\Controllers\Api\InstructorApiController;
 use App\Http\Controllers\Api\BeltApiController;
+use App\Http\Controllers\Api\ContactInfoController;
 
 use App\Http\Controllers\Api\AdminAPI\UnifiedUserController;
 use App\Http\Controllers\Api\FrontendAPI\UserController as FrontendUserController;
@@ -241,6 +242,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Notifications API
     Route::get('notifications', [NotificationApiController::class, 'index']);
+
+    // Contact Info API
+    Route::get('contact-info', [ContactInfoController::class, 'index']);
+    Route::post('contact-info', [ContactInfoController::class, 'store']);
 
 });
 
