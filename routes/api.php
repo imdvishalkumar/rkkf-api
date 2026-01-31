@@ -54,6 +54,16 @@ Route::get('exams/results/{certificate_no}/download', [ExamApiController::class,
 
 Route::middleware('auth:sanctum')->group(function () {
 
+    // Debug Auth Route
+    Route::get('/auth-debug', function (Illuminate\Http\Request $request) {
+        return [
+            'user' => $request->user(),
+            'token_id' => $request->user()->currentAccessToken()->id,
+            'token_abilities' => $request->user()->currentAccessToken()->abilities,
+            'headers' => $request->headers->all(),
+        ];
+    });
+
     Route::post('/logout', [AuthApiController::class, 'logout']);
 
     Route::get('/me', function (\Illuminate\Http\Request $request) {
@@ -69,8 +79,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ]);
     });
 
-    // Admin Specific APIs (role check done in controller)
-    Route::prefix('admin')->group(function () {
+    // Admin Specific APIs
+    Route::prefix('admin')->middleware('role:admin')->group(function () {
         // Test route to verify authentication
         Route::get('test-auth', function (\Illuminate\Http\Request $request) {
             \Illuminate\Support\Facades\Log::info('Admin test-auth route hit', [
@@ -107,7 +117,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('instructor')->middleware('role:instructor,admin')->group(function () {
         // Branch APIs
         Route::get('branches', [InstructorApiController::class, 'getAllBranches']);
-        Route::get('branches/{id}/days', [InstructorApiController::class, 'getBranchDays']);
         Route::get('students/search', [InstructorApiController::class, 'searchStudents']);
         Route::post('attendance/count', [InstructorApiController::class, 'getAttendanceCount']);
         Route::post('fastrack/attendance', [InstructorApiController::class, 'insertFastrackAttendance']);
@@ -132,7 +141,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('exams/for-attendance', [InstructorApiController::class, 'getExamsForAttendance']);
         Route::get('exams/{id}/students', [InstructorApiController::class, 'getStudentsForExam']);
         Route::post('exams/attendance', [InstructorApiController::class, 'insertExamAttendance']);
-        Route::get('exams/{id}', [InstructorApiController::class, 'getExamDetails']);
 
         Route::post('take-attendance', [AttendanceApiController::class, 'insertAttendance']);
         Route::post('take-additional-attendance', [AttendanceApiController::class, 'takeAdditionalAttendance']);
@@ -151,7 +159,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // General/Student/Frontend APIs
-    Route::prefix('students')->group(function () {
+    Route::prefix('students')->middleware('role:user')->group(function () {
         Route::get('get-by-branch', [StudentApiController::class, 'getStudentsByBranch']);
         Route::get('search', [StudentApiController::class, 'searchStudents']);
         Route::get('deactive-report', [StudentApiController::class, 'getDeactiveReport']);
@@ -173,14 +181,18 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [EventApiController::class, 'index']);
         Route::get('upcoming', [EventApiController::class, 'upcoming']);
         Route::get('participated', [EventApiController::class, 'getParticipatedEvents']);
-        Route::post('/', [EventApiController::class, 'store']);
         Route::get('/details/{id}', [EventApiController::class, 'show']);
-        Route::put('{id}', [EventApiController::class, 'update']);
-        Route::delete('{id}', [EventApiController::class, 'destroy']);
 
-        // Event like endpoints (require authentication)
+        // Event like endpoints (require authentication - general access)
         Route::get('{event_id}/like', [EventLikeController::class, 'getLikeStatus']);
         Route::post('{event_id}/like', [EventLikeController::class, 'toggleLike']);
+
+        // Admin/Instructor Event Management
+        Route::middleware('role:admin,instructor')->group(function () {
+            Route::post('/', [EventApiController::class, 'store']);
+            Route::put('{id}', [EventApiController::class, 'update']);
+            Route::delete('{id}', [EventApiController::class, 'destroy']);
+        });
 
         // Event comment endpoints (require authentication)
         Route::post('/{event_id}/comments', [EventCommentController::class, 'store']);
@@ -188,7 +200,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Exam APIs for students
-    Route::prefix('exams')->group(function () {
+    Route::prefix('exams')->middleware('role:user')->group(function () {
         Route::get('progress', [ExamApiController::class, 'getProgress']);
         Route::get('results/overview', [ExamApiController::class, 'getResultsOverview']);
         Route::get('results', [ExamApiController::class, 'getResults']);
@@ -199,17 +211,21 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::prefix('products')->group(function () {
         Route::get('list', [ProductApiController::class, 'getProductList']);
-        Route::post('store', [ProductApiController::class, 'store']);
         Route::get('{product_id}', [ProductApiController::class, 'show']);
         Route::get('show/{product_id}', [ProductApiController::class, 'productDetails']);
-        Route::put('{product_id}', [ProductApiController::class, 'update']);
-        Route::delete('{product_id}', [ProductApiController::class, 'destroy']);
-        Route::put('{product_id}/variations/{variation_id}', [ProductApiController::class, 'updateVariationQty']);
+
+        // Admin Product Management
+        Route::middleware('role:admin')->group(function () {
+            Route::post('store', [ProductApiController::class, 'store']);
+            Route::put('{product_id}', [ProductApiController::class, 'update']);
+            Route::delete('{product_id}', [ProductApiController::class, 'destroy']);
+            Route::put('{product_id}/variations/{variation_id}', [ProductApiController::class, 'updateVariationQty']);
+        });
     });
 
     Route::apiResource('product-categories', \App\Http\Controllers\Api\ProductCategoryController::class);
 
-    Route::prefix('cart')->group(function () {
+    Route::prefix('cart')->middleware('role:user')->group(function () {
         Route::get('/', [CartApiController::class, 'index']);
         Route::post('/', [CartApiController::class, 'store']);
         Route::post('quantity', [CartApiController::class, 'updateQuantity']);
@@ -224,7 +240,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Fee Payment APIs
-    Route::prefix('fees')->group(function () {
+    Route::prefix('fees')->middleware('role:user')->group(function () {
         // Get due fees for authenticated student
         Route::get('due', [FeeApiController::class, 'getDueFees']);
         // Fees summary (for Fees Summary screen)
@@ -262,7 +278,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Leave Management APIs
-    Route::prefix('leaves')->group(function () {
+    Route::prefix('leaves')->middleware('role:user')->group(function () {
         Route::post('apply', [LeaveApiController::class, 'apply']);
         Route::get('history', [LeaveApiController::class, 'history']);
     });

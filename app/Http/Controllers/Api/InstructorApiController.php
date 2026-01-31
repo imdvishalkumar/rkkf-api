@@ -18,33 +18,6 @@ class InstructorApiController extends Controller
         $this->examService = $examService;
     }
 
-    /**
-     * Get branch days
-     * GET /api/instructor/branches/{id}/days
-     */
-    public function getBranchDays($id)
-    {
-        try {
-            if (!is_numeric($id)) {
-                return ApiResponseHelper::error('Invalid ID!', 422);
-            }
-
-            $branch = DB::table('branch')
-                ->where('branch_id', $id)
-                ->first(['days']);
-
-            if (!$branch) {
-                return ApiResponseHelper::error('Invalid Branch ID!', 422);
-            }
-
-            return ApiResponseHelper::success([
-                'days' => $branch->days,
-            ], 'Branch days retrieved successfully');
-
-        } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), 500);
-        }
-    }
 
     /**
      * Get all branches
@@ -70,14 +43,22 @@ class InstructorApiController extends Controller
      * Insert exam attendance with certificate generation
      * POST /api/instructor/exams/attendance
      */
-    public function insertExamAttendance(\App\Http\Requests\Instructor\StoreExamAttendanceRequest $request)
+    public function insertExamAttendance(Request $request)
     {
         try {
+            $request->validate([
+                'exam_id' => 'required|integer|exists:exam,exam_id',
+                'attendanceArray' => 'required', // Allow string or array
+            ]);
+
             $user = Auth::user();
             $examId = $request->input('exam_id');
+            $rawValue = $request->input('attendanceArray');
 
-            $decodedArray = $request->getDecodedAttendanceArray();
-            if ($decodedArray === null) {
+            // Handle both JSON string and native array
+            $decodedArray = is_array($rawValue) ? $rawValue : json_decode($rawValue, true);
+
+            if (!is_array($decodedArray)) {
                 return ApiResponseHelper::error('Invalid attendance array format', 422);
             }
 
@@ -85,6 +66,8 @@ class InstructorApiController extends Controller
 
             return ApiResponseHelper::success($result, $result['message']);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return ApiResponseHelper::validationError($e->errors());
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), 500);
         }
@@ -414,113 +397,6 @@ class InstructorApiController extends Controller
      */
 
 
-    /**
-     * Get exam details with eligibility info
-     * GET /api/instructor/exams/{id}
-     */
-    public function getExamDetails(Request $request, $studentId)
-    {
-        try {
-            if (!is_numeric($studentId)) {
-                return ApiResponseHelper::error('Invalid ID!', 422);
-            }
-
-            $paid = false;
-            $error = false;
-            $eligibleFee = false;
-            $eligibleAtten = false;
-            $dueDateGone = false;
-
-            // Check for special case exam first
-            $exam = DB::table('exam as e')
-                ->join('special_case_exam as s', 'e.exam_id', '=', 's.exam_id')
-                ->where('e.date', '>=', now()->format('Y-m-d'))
-                ->where('e.isPublished', 1)
-                ->where('s.student_id', $studentId)
-                ->where('s.eligible', 1)
-                ->orderBy('date', 'desc')
-                ->first();
-
-            if (!$exam) {
-                return ApiResponseHelper::error('No Exam Found!', 422);
-            }
-
-            // Check if already paid
-            $feesPaid = DB::table('exam_fees')
-                ->where('exam_id', $exam->exam_id)
-                ->where('student_id', $studentId)
-                ->where('status', 1)
-                ->exists();
-
-            if ($feesPaid) {
-                $exam->paid = true;
-                return ApiResponseHelper::success([
-                    'error' => false,
-                    'data' => $exam,
-                ], 'Exam details retrieved');
-            }
-
-            // Check attendance eligibility
-            $attendanceCount = DB::table('attendance')
-                ->where('attend', 'P')
-                ->where('student_id', $studentId)
-                ->whereBetween('date', [$exam->from_criteria, $exam->to_criteria])
-                ->count();
-
-            $eligibleAtten = $attendanceCount >= $exam->sessions_count;
-
-            // Check special case if not eligible by attendance
-            if (!$eligibleAtten) {
-                $specialCase = DB::table('special_case_exam')
-                    ->where('student_id', $studentId)
-                    ->where('exam_id', $exam->exam_id)
-                    ->where('eligible', 1)
-                    ->exists();
-
-                if ($specialCase) {
-                    $eligibleAtten = true;
-                }
-            }
-
-            // Calculate months in criteria period
-            $diffInMonths = DB::selectOne("
-                SELECT TIMESTAMPDIFF(month, ?, ?) + 1 AS DateDiff
-            ", [$exam->from_criteria, $exam->to_criteria])->DateDiff ?? 0;
-
-            // Check fees eligibility
-            $feeCount = DB::table('fees')
-                ->where('student_id', $studentId)
-                ->whereRaw("CAST(CONCAT(year,'-', months,'-01') as date) >= ?", [$exam->from_criteria])
-                ->whereRaw("CAST(CONCAT(year,'-', months,'-01') as date) <= ?", [$exam->to_criteria])
-                ->count();
-
-            $eligibleFee = $feeCount >= $diffInMonths;
-
-            // Check due date
-            $dueDateGone = now()->gt($exam->fess_due_date);
-
-            // Get next belt fee
-            $nextBelt = DB::table('belt')
-                ->whereRaw('belt_id = ((SELECT belt_id FROM students WHERE student_id = ?) + 1)', [$studentId])
-                ->first(['belt_id', 'exam_fees']);
-
-            $examData = (array) $exam;
-            $examData['paid'] = $paid;
-            $examData['eligibleAttendance'] = $eligibleAtten;
-            $examData['eligibleFee'] = $eligibleFee;
-            $examData['dueDateGone'] = $dueDateGone;
-            $examData['fees'] = $nextBelt->exam_fees ?? '0';
-            $examData['belt_id'] = $nextBelt->belt_id ?? '0';
-
-            return ApiResponseHelper::success([
-                'error' => $error,
-                'data' => [$examData],
-            ], 'Exam details retrieved');
-
-        } catch (Exception $e) {
-            return ApiResponseHelper::error($e->getMessage(), 500);
-        }
-    }
 
     /**
      * Get all students list for instructor (Student Details screen)

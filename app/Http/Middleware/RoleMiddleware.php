@@ -19,19 +19,45 @@ class RoleMiddleware
             return ApiResponseHelper::unauthorized('Authentication required');
         }
 
-        \Illuminate\Support\Facades\Log::info('RoleMiddleware check', [
-            'user_id' => $user->user_id,
-            'user_role_attribute' => $user->role instanceof \App\Enums\UserRole ? $user->role->value : $user->role,
-            'spatie_roles' => $user->getRoleNames(),
-            'required_roles' => $roles,
-        ]);
+        // Map 'user' role to 'student' for Spatie check (DB check)
+        // This allows using 'role:user' in routes which matches the 'user' scope/enum
+        $spatieRoles = array_map(function ($role) {
+            return ($role === 'user') ? 'student' : $role;
+        }, $roles);
 
-        if (!$user->hasAnyRole($roles)) {
-            \Illuminate\Support\Facades\Log::warning('RoleMiddleware: Unauthorized', [
+        // 1. Check DB Role (Spatie)
+        if (!$user->hasAnyRole($spatieRoles)) {
+            \Illuminate\Support\Facades\Log::warning('RoleMiddleware: Unauthorized (DB Role Mismatch)', [
                 'user_id' => $user->user_id,
-                'required' => $roles
+                'user_roles' => $user->getRoleNames(),
+                'required_roles' => $roles,
+                'mapped_spatie_roles' => $spatieRoles
             ]);
             return ApiResponseHelper::forbidden('Unauthorized access. Required role: ' . implode(', ', $roles));
+        }
+
+        // 2. Check Token Scope (Sanctum Ability)
+        // Ensure the token itself has the permission/scope for the requested route role
+        $token = $user->currentAccessToken();
+        if ($token) {
+            $hasScope = false;
+            foreach ($roles as $role) {
+                // $token->can() checks if the specific ability appears in the token's abilities list
+                // or if the token has the '*' ability.
+                if ($token->can($role)) {
+                    $hasScope = true;
+                    break;
+                }
+            }
+
+            if (!$hasScope) {
+                \Illuminate\Support\Facades\Log::warning('RoleMiddleware: Unauthorized (Token Scope Mismatch)', [
+                    'user_id' => $user->user_id,
+                    'token_abilities' => $token->abilities,
+                    'required_scopes' => $roles
+                ]);
+                return ApiResponseHelper::forbidden('Access denied. Token invalid for this area.');
+            }
         }
 
         return $next($request);
