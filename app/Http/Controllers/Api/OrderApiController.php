@@ -308,6 +308,10 @@ class OrderApiController extends Controller
             try {
                 $createdOrders = [];
 
+                // Get next counter value
+                $maxCounter = \App\Models\Order::max('counter') ?? 0;
+                $counter = $maxCounter + 1;
+
                 // Create order for each cart item
                 foreach ($orderItems as $item) {
                     $order = \App\Models\Order::create([
@@ -322,7 +326,7 @@ class OrderApiController extends Controller
                         'date' => now()->toDateString(),
                         'rp_order_id' => $rpOrderId ?? '',
                         'flag_delivered' => 0,
-                        'counter' => 0,
+                        'counter' => $counter,
                         'flag' => 0,
                     ]);
 
@@ -354,6 +358,7 @@ class OrderApiController extends Controller
                 return ApiResponseHelper::success([
                     'orders' => $createdOrders,
                     'order_count' => count($createdOrders),
+                    'counter' => $counter,
                     'subtotal' => round($subtotal, 2),
                     'discount' => round($discount, 2),
                     'grand_total' => round($grandTotal, 2),
@@ -366,6 +371,237 @@ class OrderApiController extends Controller
                 DB::rollBack();
                 throw $e;
             }
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Initiate Order (Create Razorpay Order + Pending DB Orders)
+     * POST /api/orders/initiate
+     * 
+     * This is Step 1 of the checkout flow for ONLINE payment:
+     * 1. Creates Razorpay order
+     * 2. Creates pending orders in DB (status=0)
+     * 3. Clears cart
+     * 4. Returns razorpay order_id to frontend for payment modal
+     * 
+     * Request body:
+     * - coupon_id: int (optional)
+     */
+    public function initiateOrder(Request $request)
+    {
+        try {
+            $user = $request->user();
+            if (!$user || !$user->student) {
+                return ApiResponseHelper::error('Student record not found for this user', 404);
+            }
+
+            $studentId = $user->student->student_id;
+
+            $request->validate([
+                'coupon_id' => 'nullable|integer|exists:coupon,coupon_id',
+            ]);
+
+            // Get cart items for this student
+            $cartItems = \App\Models\Cart::with(['product', 'variation'])
+                ->where('student_id', $studentId)
+                ->get();
+
+            if ($cartItems->isEmpty()) {
+                return ApiResponseHelper::error('Cart is empty. Add items to cart before placing order.', 422);
+            }
+
+            $couponId = $request->input('coupon_id');
+
+            // Calculate totals
+            $subtotal = 0;
+            $orderItems = [];
+
+            foreach ($cartItems as $cartItem) {
+                $unitPrice = $cartItem->variation->price ?? $cartItem->product->price ?? 0;
+                $itemTotal = $unitPrice * $cartItem->qty;
+                $subtotal += $itemTotal;
+
+                $orderItems[] = [
+                    'product_id' => $cartItem->product_id,
+                    'variation_id' => $cartItem->variation_id,
+                    'name_var' => $cartItem->variation->variation ?? null,
+                    'qty' => $cartItem->qty,
+                    'unit_price' => $unitPrice,
+                    'item_total' => $itemTotal,
+                ];
+            }
+
+            // Apply coupon discount
+            $discount = 0;
+            $coupon = null;
+            if ($couponId) {
+                $coupon = \App\Models\Coupon::where('coupon_id', $couponId)
+                    ->where('used', 0)
+                    ->first();
+
+                if ($coupon) {
+                    $discount = $coupon->amount;
+                } else {
+                    return ApiResponseHelper::error('Coupon is invalid or already used.', 422);
+                }
+            }
+
+            $grandTotal = max(0, $subtotal - $discount);
+
+            if ($grandTotal <= 0) {
+                return ApiResponseHelper::error('Order total must be greater than 0 for online payment.', 422);
+            }
+
+            // Create Razorpay order
+            $keyId = config('services.razorpay.key');
+            $keySecret = config('services.razorpay.secret');
+
+            if (!$keyId || !$keySecret) {
+                return ApiResponseHelper::error('Payment gateway not configured.', 500);
+            }
+
+            $api = new \Razorpay\Api\Api($keyId, $keySecret);
+
+            $razorpayOrder = $api->order->create([
+                'amount' => (int) ($grandTotal * 100), // Amount in paise
+                'currency' => 'INR',
+                'notes' => [
+                    'student_id' => $studentId,
+                    'type' => 'product_order',
+                ],
+            ]);
+
+            $razorpayOrderId = $razorpayOrder['id'];
+
+            DB::beginTransaction();
+
+            try {
+                $createdOrders = [];
+
+                // Get next counter value
+                $maxCounter = \App\Models\Order::max('counter') ?? 0;
+                $counter = $maxCounter + 1;
+
+                // Create pending orders in DB
+                foreach ($orderItems as $item) {
+                    $order = \App\Models\Order::create([
+                        'student_id' => $studentId,
+                        'product_id' => $item['product_id'],
+                        'variation_id' => $item['variation_id'] ?? 0,
+                        'name_var' => $item['name_var'] ?? '',
+                        'qty' => $item['qty'],
+                        'p_price' => $item['item_total'],
+                        'status' => 0, // Pending
+                        'viewed' => 0,
+                        'date' => now()->toDateString(),
+                        'rp_order_id' => $razorpayOrderId,
+                        'flag_delivered' => 0,
+                        'counter' => $counter,
+                        'flag' => 0,
+                    ]);
+
+                    $createdOrders[] = $order->order_id;
+
+                    // Reduce stock (reserve)
+                    if ($item['variation_id']) {
+                        \App\Models\Variation::where('id', $item['variation_id'])
+                            ->decrement('qty', $item['qty']);
+                    }
+                }
+
+                // Mark coupon as used
+                if ($coupon) {
+                    $coupon->used = 1;
+                    $coupon->save();
+                }
+
+                // Clear cart
+                \App\Models\Cart::where('student_id', $studentId)->delete();
+
+                DB::commit();
+
+                return ApiResponseHelper::success([
+                    'order_ids' => $createdOrders,
+                    'counter' => $counter,
+                    'rp_order_id' => $razorpayOrderId,
+                    'rp_key_id' => $keyId,
+                    'amount' => round($grandTotal, 2),
+                    'currency' => 'INR',
+                ], 'Order initiated. Proceed to payment.');
+
+            } catch (Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
+        }
+    }
+
+    /**
+     * Verify Order Payment (After Razorpay Payment)
+     * POST /api/orders/verify
+     * 
+     * This is Step 2 of the checkout flow:
+     * After frontend payment, verify and confirm the order.
+     * 
+     * Request body:
+     * - rp_order_id: string (Razorpay order ID)
+     * - rp_payment_id: string (Razorpay payment ID)
+     * - rp_signature: string (Razorpay signature for verification)
+     */
+    public function verifyOrder(Request $request)
+    {
+        try {
+            $request->validate([
+                'rp_order_id' => 'required|string',
+                'rp_payment_id' => 'required|string',
+                'rp_signature' => 'required|string',
+            ]);
+
+            $rpOrderId = $request->input('rp_order_id');
+            $rpPaymentId = $request->input('rp_payment_id');
+            $rpSignature = $request->input('rp_signature');
+
+            // Verify signature
+            $keyId = config('services.razorpay.key');
+            $keySecret = config('services.razorpay.secret');
+
+            if (!$keyId || !$keySecret) {
+                return ApiResponseHelper::error('Payment gateway not configured.', 500);
+            }
+
+            $api = new \Razorpay\Api\Api($keyId, $keySecret);
+
+            $attributes = [
+                'razorpay_order_id' => $rpOrderId,
+                'razorpay_payment_id' => $rpPaymentId,
+                'razorpay_signature' => $rpSignature,
+            ];
+
+            try {
+                $api->utility->verifyPaymentSignature($attributes);
+            } catch (\Exception $e) {
+                return ApiResponseHelper::error('Payment verification failed: ' . $e->getMessage(), 400);
+            }
+
+            // Update orders to confirmed
+            $updated = \App\Models\Order::where('rp_order_id', $rpOrderId)
+                ->update(['status' => 1]);
+
+            if ($updated === 0) {
+                return ApiResponseHelper::error('No orders found for this payment.', 404);
+            }
+
+            return ApiResponseHelper::success([
+                'verified' => true,
+                'orders_updated' => $updated,
+                'rp_payment_id' => $rpPaymentId,
+            ], 'Payment verified. Order confirmed!');
 
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));

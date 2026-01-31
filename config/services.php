@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'razorpay' => [
+        'key' => 'rzp_test_2X1qQqZpZpZpZp',
+        'secret' => 'your_secret_key',
+    ],
+
 ];

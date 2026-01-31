@@ -521,4 +521,368 @@ class InstructorApiController extends Controller
             return ApiResponseHelper::error($e->getMessage(), 500);
         }
     }
+
+    /**
+     * Get all students list for instructor (Student Details screen)
+     * GET /api/instructor/students?branch_id=1&search=john
+     * 
+     * Features:
+     * - Filter by branch
+     * - Search by name or student ID
+     * - Includes branch name and belt details
+     */
+    public function getAllStudents(Request $request)
+    {
+        try {
+            $request->validate([
+                'branch_id' => 'nullable|integer|exists:branch,branch_id',
+                'search' => 'nullable|string|max:100',
+            ]);
+
+            $branchId = $request->input('branch_id');
+            $search = $request->input('search', '');
+            $search = trim($search);
+
+            $query = \App\Models\Student::with(['branch', 'belt'])
+                ->where('active', 1);
+
+            // Filter by branch if provided
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            }
+
+            // Search by name or student ID
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('student_id', 'like', $search . '%')
+                        ->orWhere(DB::raw("CONCAT(firstname, ' ', lastname)"), 'like', '%' . $search . '%');
+                });
+            }
+
+            $students = $query->orderBy('firstname', 'asc')
+                ->limit(100)
+                ->get();
+
+            $data = $students->map(function ($student) {
+                return [
+                    'student_id' => $student->student_id,
+                    'name' => $student->firstname . ' ' . $student->lastname,
+                    'firstname' => $student->firstname,
+                    'lastname' => $student->lastname,
+                    'branch_id' => $student->branch_id,
+                    'branch_name' => $student->branch?->name,
+                    'belt_id' => $student->belt_id,
+                    'belt_name' => $student->belt?->name,
+                    'profile_img' => $student->profile_img,
+                    'active' => $student->active,
+                ];
+            });
+
+            return ApiResponseHelper::success([
+                'data' => $data,
+                'total' => $data->count(),
+            ], 'Students retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get detailed student profile for instructor view
+     * GET /api/instructor/students/{id}/profile
+     * 
+     * Returns complete student information including:
+     * - Personal Info (email, DOB, DOJ, address, pincode)
+     * - Contact info (self, father, mother numbers)
+     * - Branch and Belt details
+     * - Total attendance count
+     */
+    public function getStudentProfile($id)
+    {
+        try {
+            if (!is_numeric($id)) {
+                return ApiResponseHelper::error('Invalid Student ID!', 422);
+            }
+
+            $student = \App\Models\Student::with(['branch', 'belt'])
+                ->where('student_id', $id)
+                ->first();
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student not found!', 404);
+            }
+
+            // Get attendance count
+            $attendanceCount = DB::table('attendance')
+                ->where('student_id', $id)
+                ->where('attend', 'P')
+                ->count();
+
+            // Map Gender
+            $genderMap = [
+                0 => 'Other',
+                1 => 'Male',
+                2 => 'Female',
+            ];
+            $gender = $genderMap[$student->gender] ?? 'Other';
+
+            // Prepare profile image URL
+            $profileImgUrl = asset('images/default-avatar.png');
+            if ($student->profile_img && $student->profile_img !== 'default.png') {
+                $profileImgUrl = asset('storage/profile_images/' . $student->profile_img);
+            }
+
+            $data = [
+                'student_id' => $student->student_id,
+                'name' => $student->firstname . ' ' . $student->lastname,
+                'firstname' => $student->firstname,
+                'lastname' => $student->lastname,
+                'role' => 'Student',
+                'profile_img_url' => $profileImgUrl,
+
+                // Personal Info Tab
+                'personal_info' => [
+                    'email' => $student->email,
+                    'joining_date' => $student->doj ? $student->doj->format('d-m-Y') : null,
+                    'date_of_birth' => $student->dob ? $student->dob->format('d-m-Y') : null,
+                    'address' => $student->address,
+                    'pincode' => $student->pincode,
+                    'gender' => $gender,
+                    'std' => $student->std,
+                ],
+
+                // Branch and Belt Info
+                'branch_id' => $student->branch_id,
+                'branch_name' => $student->branch?->name,
+                'belt_id' => $student->belt_id,
+                'belt_name' => $student->belt?->name,
+
+                // Attendance
+                'attendance_count' => $attendanceCount,
+                'dib' => 'N/A', // Days in Branch - can calculate if needed
+
+                // Contact Tab
+                'contact' => [
+                    'self_number' => $student->selfno,
+                    'self_whatsapp' => $student->selfwp,
+                    'father_number' => $student->dadno,
+                    'father_whatsapp' => $student->dadwp,
+                    'mother_number' => $student->momno,
+                    'mother_whatsapp' => $student->momwp,
+                ],
+
+                'active' => (bool) $student->active,
+                'gr_no' => $student->gr_no,
+            ];
+
+            return ApiResponseHelper::success([
+                'data' => $data,
+            ], 'Student profile retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get students list for Additional Attendance screen
+     * GET /api/instructor/additional-attendance/students?branch_id=1&search=john
+     * 
+     * Returns students with their attendance count for the selected date
+     */
+    public function getStudentsForAdditionalAttendance(Request $request)
+    {
+        try {
+            $request->validate([
+                'branch_id' => 'nullable|integer|exists:branch,branch_id',
+                'search' => 'nullable|string|max:100',
+            ]);
+
+            $branchId = $request->input('branch_id');
+            $search = $request->input('search', '');
+            $search = trim($search);
+
+            $query = \App\Models\Student::with(['branch'])
+                ->where('active', 1)
+                ->whereNotIn('student_id', function ($q) {
+                    $q->select('student_id')->from('fastrack');
+                });
+
+            // Filter by branch if provided
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            }
+
+            // Search by name or student ID
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('student_id', 'like', $search . '%')
+                        ->orWhere(DB::raw("CONCAT(firstname, ' ', lastname)"), 'like', '%' . $search . '%');
+                });
+            }
+
+            $students = $query->orderBy('firstname', 'asc')
+                ->limit(100)
+                ->get();
+
+            $data = $students->map(function ($student) {
+                // Get today's attendance count for this student
+                $attendCount = DB::table('attendance')
+                    ->where('student_id', $student->student_id)
+                    ->where('date', now()->format('Y-m-d'))
+                    ->where('attend', 'P')
+                    ->count();
+
+                return [
+                    'student_id' => $student->student_id,
+                    'name' => $student->firstname . ' ' . $student->lastname,
+                    'firstname' => $student->firstname,
+                    'lastname' => $student->lastname,
+                    'branch_id' => $student->branch_id,
+                    'branch_name' => $student->branch?->name,
+                    'attend_count' => $attendCount,
+                    'profile_img' => $student->profile_img,
+                ];
+            });
+
+            return ApiResponseHelper::success([
+                'data' => $data,
+                'total' => $data->count(),
+            ], 'Students retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Get students list for Fastrack Attendance screen
+     * GET /api/instructor/fastrack/students?branch_id=1&start_date=2024-01-01&end_date=2024-01-31&search=john
+     * 
+     * Returns fastrack students with optional date range filter
+     */
+    public function getStudentsForFastrackAttendance(Request $request)
+    {
+        try {
+            $request->validate([
+                'branch_id' => 'nullable|integer|exists:branch,branch_id',
+                'start_date' => 'nullable|date',
+                'end_date' => 'nullable|date|after_or_equal:start_date',
+                'search' => 'nullable|string|max:100',
+            ]);
+
+            $branchId = $request->input('branch_id');
+            $startDate = $request->input('start_date');
+            $endDate = $request->input('end_date');
+            $search = $request->input('search', '');
+            $search = trim($search);
+
+            // Get fastrack students
+            $query = DB::table('students as s')
+                ->join('fastrack as f', 's.student_id', '=', 'f.student_id')
+                ->join('branch as br', 's.branch_id', '=', 'br.branch_id')
+                ->where('s.active', 1);
+
+            // Filter by branch if provided
+            if ($branchId) {
+                $query->where('s.branch_id', $branchId);
+            }
+
+            // Search by name or student ID
+            if (!empty($search)) {
+                $query->where(function ($q) use ($search) {
+                    $q->where('s.student_id', 'like', $search . '%')
+                        ->orWhere(DB::raw("CONCAT(s.firstname, ' ', s.lastname)"), 'like', '%' . $search . '%');
+                });
+            }
+
+            $students = $query->select(
+                's.student_id',
+                's.firstname',
+                's.lastname',
+                's.branch_id',
+                's.profile_img',
+                'br.name as branch_name'
+            )
+                ->orderBy('s.firstname', 'asc')
+                ->limit(100)
+                ->get();
+
+            // Get fastrack hours for each student if date range is provided
+            $data = $students->map(function ($student) use ($startDate, $endDate) {
+                $hoursQuery = DB::table('fastrack_attendance')
+                    ->where('student_id', $student->student_id);
+
+                if ($startDate && $endDate) {
+                    $hoursQuery->whereBetween('date', [$startDate, $endDate]);
+                }
+
+                $totalHours = $hoursQuery->sum('hours');
+
+                return [
+                    'student_id' => $student->student_id,
+                    'name' => $student->firstname . ' ' . $student->lastname,
+                    'firstname' => $student->firstname,
+                    'lastname' => $student->lastname,
+                    'branch_id' => $student->branch_id,
+                    'branch_name' => $student->branch_name,
+                    'profile_img' => $student->profile_img,
+                    'total_hours' => (float) $totalHours,
+                ];
+            });
+
+            return ApiResponseHelper::success([
+                'data' => $data,
+                'total' => $data->count(),
+            ], 'Fastrack students retrieved successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Update student contact information (for instructor)
+     * PUT /api/instructor/students/{id}/contact
+     */
+    public function updateStudentContact(Request $request, $id)
+    {
+        try {
+            if (!is_numeric($id)) {
+                return ApiResponseHelper::error('Invalid Student ID!', 422);
+            }
+
+            $request->validate([
+                'selfno' => 'nullable|string|max:15',
+                'selfwp' => 'nullable|string|max:15',
+                'dadno' => 'nullable|string|max:15',
+                'dadwp' => 'nullable|string|max:15',
+                'momno' => 'nullable|string|max:15',
+                'momwp' => 'nullable|string|max:15',
+            ]);
+
+            $student = \App\Models\Student::find($id);
+
+            if (!$student) {
+                return ApiResponseHelper::error('Student not found!', 404);
+            }
+
+            $student->update($request->only([
+                'selfno',
+                'selfwp',
+                'dadno',
+                'dadwp',
+                'momno',
+                'momwp'
+            ]));
+
+            return ApiResponseHelper::success([
+                'updated' => 1,
+            ], 'Student contact updated successfully');
+
+        } catch (Exception $e) {
+            return ApiResponseHelper::error($e->getMessage(), 500);
+        }
+    }
 }

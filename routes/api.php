@@ -112,6 +112,17 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('attendance/count', [InstructorApiController::class, 'getAttendanceCount']);
         Route::post('fastrack/attendance', [InstructorApiController::class, 'insertFastrackAttendance']);
 
+        // Student Details & Profile (for Instructor)
+        Route::get('students', [InstructorApiController::class, 'getAllStudents']);
+        Route::get('students/{id}/profile', [InstructorApiController::class, 'getStudentProfile']);
+        Route::put('students/{id}/contact', [InstructorApiController::class, 'updateStudentContact']);
+
+        // Additional Attendance
+        Route::get('additional-attendance/students', [InstructorApiController::class, 'getStudentsForAdditionalAttendance']);
+
+        // Fastrack Attendance Students
+        Route::get('fastrack/students', [InstructorApiController::class, 'getStudentsForFastrackAttendance']);
+
         // Event Attendance
         Route::get('events/for-attendance', [InstructorApiController::class, 'getEventsForAttendance']);
         Route::get('events/{id}/students', [InstructorApiController::class, 'getStudentsForEvent']);
@@ -234,7 +245,20 @@ Route::middleware('auth:sanctum')->group(function () {
         // Delete product route was inside OrderController? Keeping it if legacy requires.
         Route::post('delete-product', [OrderApiController::class, 'deleteProduct']);
         Route::post('review', [OrderApiController::class, 'submitReview']);
-        Route::post('create', [OrderApiController::class, 'store']); // Create new order
+        Route::post('create', [OrderApiController::class, 'store']); // Create new order (COD)
+
+        // Online Payment Flow
+        Route::post('initiate', [OrderApiController::class, 'initiateOrder']); // Step 1: Create Razorpay order
+        Route::post('verify', [OrderApiController::class, 'verifyOrder']); // Step 2: Verify payment
+
+        // Debug Auth
+        Route::get('debug-auth', function (\Illuminate\Http\Request $request) {
+            return \App\Helpers\ApiResponseHelper::success([
+                'user' => $request->user(),
+                'headers' => $request->headers->all(),
+                'config_key' => config('services.razorpay.key') // debug config too
+            ], 'Auth is working!');
+        });
     });
 
     // Leave Management APIs

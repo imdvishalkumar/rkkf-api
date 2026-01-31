@@ -40,7 +40,6 @@ class CartApiController extends Controller
             $cartItems = Cart::with(['product', 'variation'])
                 ->where('student_id', $studentId)
                 ->get();
-
             $formattedItems = $cartItems->map(function ($item) {
                 // Handle image URL
                 $baseUrl = config('app.url') . '/images/products/';
@@ -56,15 +55,22 @@ class CartApiController extends Controller
                     'product_details' => $item->product->details ?? null,
                     'variation_id' => $item->variation_id,
                     'variation_name' => $item->variation->variation ?? null,
-                    'price' => $item->variation->price ?? 0,
+                    'price' => number_format((float) ($item->variation->price ?? 0), 2, '.', ''),
                     'image1' => $image,
                 ];
             });
 
-            return ApiResponseHelper::success(
-                $formattedItems,
-                $formattedItems->isEmpty() ? 'Cart is empty!' : 'Cart items retrieved successfully'
-            );
+            return response()->json([
+                'status' => true,
+                'message' => $formattedItems->isEmpty() ? 'Cart is empty!' : 'Cart items retrieved successfully',
+                'data' => $formattedItems,
+                'cart_count' => $cartItems->count(),
+                'errors' => null,
+                'meta' => [
+                    'timestamp' => now()->toIso8601String(),
+                    'version' => '1.0',
+                ],
+            ]);
 
         } catch (Exception $e) {
             return ApiResponseHelper::error($e->getMessage(), ApiResponseHelper::getStatusCode($e, 500));
